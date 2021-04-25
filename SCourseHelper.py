@@ -1,4 +1,5 @@
 import base64
+import configparser
 import getpass
 import time
 from collections import namedtuple
@@ -8,14 +9,22 @@ import requests
 import rsa
 
 
+
 # Settings
-QUERY_DELAY = 5
-CHK_SELECT_TIME_DELAY = 5
-WARN_DIFF_CAMPUS = True
+query_delay = 5
+chk_select_time_delay = 5
+warn_diff_campus = True
+CONFIGPATH="courses.txt"
 
 # Variables
 Termlist = []
 Courselist = []
+inputlist=[]
+username=""
+password=""
+encryptedpassword=""
+sterm=0
+
 
 # Declaration
 Termitem = namedtuple("Term", ["termid", "name"])
@@ -44,8 +53,93 @@ _keystr = '''-----BEGIN PUBLIC KEY-----
     MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDl/aCgRl9f/4ON9MewoVnV58OLOU2ALBi2FKc5yIsfSpivKxe7A6FitJjHva3WpM7gvVOinMehp6if2UNIkbaN+plWf5IwqEVxsNZpeixc4GsbY9dXEk3WtRjwGSyDLySzEESH/kpJVoxO7ijRYqU+2oSRwTBNePOk1H+LRQokgQIDAQAB
     -----END PUBLIC KEY-----'''
 
+def initconfig():
+    config=configparser.ConfigParser(allow_no_value=True)
+    config["Userinfo"]={}
+    config["Userinfo"]["user"]=""
+    config["Userinfo"]["password"]=""
+    config["Userinfo"]["encryptpassword"]=""
+    config["Settings"]={}
+    config["Settings"]["term"]=""
+    config["Settings"]["querydelay"]="5"
+    config["Settings"]["checkselectdelay"]="5"
+    config["Settings"]["warndiffcampus"]="1"
+    config["Courses"]={}
+    for i in range(1,10):
+        config["Courses"]["course%d"%i]=""
+    
+    try:
+        with open(CONFIGPATH, 'w') as configfile:
+            config.write(configfile,space_around_delimiters=False)
+        print("Default config file is saved")
+    except:
+        print("Unable to initialize config")
 
-def clear():
+def readconfig():
+    config=configparser.ConfigParser(allow_no_value=True)
+    try:
+        config.read(CONFIGPATH)
+        userinfo=config["Userinfo"]
+        settings=config["Settings"]
+    except KeyError:
+        print("Warning: Config is corrupted")
+        initconfig()
+        return
+    courses=config["Courses"]
+    global username,password,encryptedpassword,sterm,query_delay,chk_select_time_delay,warn_diff_campus,inputlist #use global in order to modify global values
+    username=userinfo.get("user","")
+    password=userinfo.get("password","")
+    encryptedpassword=userinfo.get("encryptpassword","")
+    sterm=settings.get("term","")
+    try:
+        query_delay = int(settings.get("querydelay","5"))
+    except:
+        print("Warning: config of querydelay is invalid, set to default..")
+        query_delay = 5
+    try:
+        chk_select_time_delay = int(settings.get("checkselectdelay","5"))
+    except:
+        print("Warning: config of checkselectdelay is invalid, set to default..")
+        chk_select_time_delay = 5
+    try:
+        warn_diff_campus = bool(int(settings.get("warndiffcampus","1")))
+    except:
+        print("Warning: config of warndiffcampus is invalid, set to default..")
+        warn_diff_campus = True
+    
+    for i in range(1,10):
+        s=courses.get("course%d"%i,"")
+        if s!="":
+            a=s.split(",")
+            if len(a)!=2 or len(a[0])!=8 or len(a[1])!=4:
+                print(s+" is not a valid course format")
+            else:
+                inputlist.append(Courseitem._make(s.split(",")))
+        
+def writeepwd():
+    config=configparser.ConfigParser(allow_no_value=True)
+    config.read(CONFIGPATH)
+    config["Userinfo"]["user"]=username
+    config["Userinfo"]["encryptpassword"]=encryptedpassword
+    config["Userinfo"]["password"]=""
+    try:
+        with open(CONFIGPATH, 'w') as configfile:
+            config.write(configfile,space_around_delimiters=False)
+    except:
+        print("Error: Unable to write config")
+
+def writeterm():
+    config=configparser.ConfigParser(allow_no_value=True)
+    config.read(CONFIGPATH)
+    config["Settings"]["term"]=sterm
+    try:
+        with open(CONFIGPATH, 'w') as configfile:
+            config.write(configfile,space_around_delimiters=False)
+    except:
+        print("Error: Unable to write config")
+
+
+def clear():    #cross-platform clear screen function
     # for windows
     if name == 'nt':
         _ = system('cls')
@@ -60,17 +154,24 @@ def encryptPass(passwd):
                                               pubkey)).decode()
     return encryptpwd
 
-
 def getTerms(text):
     html = lxml.etree.HTML(text)
     termslist = html.xpath("//table/tr[@name='rowterm']")
     terms = []
     for term in termslist:
-        termid = int(term.attrib["value"])
+        termid = term.attrib["value"]
         name = term.xpath("./td/text()")[0].strip()
         terms.append(Termitem(termid, name))
     return terms
 
+def deletecoursefromlist(cid,tid):
+    global Courselist
+    for index, item in enumerate(Courselist):
+        if (item.courseid == cid) and (item.teacherid == tid):
+            break
+        else:
+            raise ValueError("Unexpected Result")
+    del Courselist[index]
 
 def getCourseInfo(cid, tid, sess):
     params = {
@@ -136,7 +237,7 @@ def selectCourse(courses, sess):
     for j in range(i, 9):
         params["cids[%d]" % j] = ""
         params["tnos[%d]" % j] = ""
-    if (WARN_DIFF_CAMPUS):
+    if warn_diff_campus:
         checkDiffCampus(params, sess)
     r = sess.post(_baseurl + _selectcourse, params)
     html = lxml.etree.HTML(r.text)
@@ -171,23 +272,23 @@ def isSelectTime(sess):
 
 
 def selectTerm(term, sess):
+    global sterm
+    sterm=term
     r = sess.post(_baseurl + _termselect, {"termId": term})
     if "姓名" in r.text:
         print("-------------------------")
     else:
         raise RuntimeError(2, f"Login Failed")
+    writeterm()
+    print("Term info has been saved, to change it or select again, please delete the value in config file",end="\n\n")
     return sess
 
 
 def login(username, encryptpwd):
     print("Logging in...")
     session = requests.Session()
-    '''
-    session.verify = r'./FiddlerRoot.pem'
-    session.proxies = {
-        "http": "http://127.0.0.1:1452",
-        "https": "http:127.0.0.1:1452"
-    }'''
+    
+    
     r = session.get(_baseurl)
     '''if r.url.startswith(_baseurl):
         return session'''
@@ -197,9 +298,24 @@ def login(username, encryptpwd):
     request_data = {"username": username, "password": encryptpwd}
     r = session.post(r.url, request_data)
     if not r.url.endswith(_termindex):
+        if "too many requests" in r.text:
+            raise RuntimeError(2,f"Too many Requests, try again later")
         raise RuntimeError(2, f"Login Failed")
     else:
         print("Login Successful:" + username)
+        global encryptedpassword
+        if encryptedpassword=="":
+            tmp=input("Do you want to save encrypted credentials in config?[Y/N]:")
+            while True:
+                if tmp=="Y" or tmp=="y":
+                    encryptedpassword=encryptPass(password)
+                    writeepwd()
+                    break
+                else:
+                    if tmp=="N" or tmp=="n":
+                        break
+                    else:
+                        tmp=input("Please enter ""Y"" or ""N"" :")
         print("-------------------------")
         Termlist = getTerms(r.text)
         if len(Termlist) > 1:  # User Selection if exists multiple terms
@@ -207,8 +323,12 @@ def login(username, encryptpwd):
             i = 1
             for tmp in Termlist:
                 print(str(i) + ': ' + tmp.name)
+                if tmp.termid==sterm:
+                    print("Selected Term: " + tmp.name)
+                    return selectTerm(sterm, session)
                 i += 1
             s = 0
+            
             while not (1 <= s <= i - 1):
                 s = int(input("Select Term[1-" + str(i - 1) + "]:"))
             print("Selected Term: " + Termlist[s - 1].name)
@@ -219,25 +339,66 @@ def login(username, encryptpwd):
 
 
 print("SCourseHelper V1.0")
+print()
 
-username = input("User:")
-password = getpass.getpass("Password:")
+readconfig()
+print()
+if username=="":
+    username = input("User:")
+else:
+    print("User:%s"%username)
+if password=="" and encryptedpassword=="":
+    password = getpass.getpass("Password:")
+if encryptedpassword!="":
+    s = login(username, encryptedpassword)
+else:
+    s = login(username, encryptPass(password))
 
-s = login(username, encryptPass(password))
+
+
+
 if not isSelectTime(s):
     i = 0
-    print("Not Selection Time...Wait %d sec..." % CHK_SELECT_TIME_DELAY)
+    print("Not Selection Time...Wait %d sec..." % chk_select_time_delay)
     while True:
         print("Retry Times: " + str(i), end='\r')
-        time.sleep(CHK_SELECT_TIME_DELAY)
+        time.sleep(chk_select_time_delay)
         i += 1
         if isSelectTime(s):
             break
 
-print("Selection Time OK")
-inputlist = []
-inputlist = eval(input("Enter the course list:"))
-print("Checking Courses", end="\n\n")
+print("Selection Time OK",end="\n\n")
+if len(inputlist)==0:
+    #inputlist = eval(input("Enter the course list:"))
+    i=1
+    print("Please enter the info of courses, enter nothing to finish")
+    while i<10:
+        a=input("Enter the course  id of course %d :"%i)
+        
+        if (a==""):
+            if i>1:
+                break
+            else:
+                print("You must enter at least 1 course")
+                continue
+        if(len(a)!=8):
+            print("Invalid input, please enter again")
+            continue
+        b=input("Enter the teacher id of course %d :"%i)
+
+        if (b==""):
+            if i>1:
+                break
+            else:
+                print("incomplete information, please enter again")
+                continue
+        if(len(b)!=4):
+            print("Invalid input, please enter again")
+            continue
+        inputlist.append(Courseitem(a,b))
+        i+=1
+    
+print("Checking %d Courses"%len(inputlist), end="\n\n")
 print("-------------------------")
 for pair in inputlist:
     if len(Courselist) == 9:
@@ -286,13 +447,7 @@ while True:
                   (selection.coursename, selection.courseid,
                    selection.teachername, selection.teacherid, selection.msg))
             if selection.isSuccess or ("已选此课程" in selection.msg) or ("课时冲突" in selection.msg):
-                for index, item in enumerate(Courselist):
-                    if (item.courseid == selection.courseid) and (
-                            item.teacherid == selection.teacherid):
-                        break
-                else:
-                    raise ValueError("Unexpected Result")
-                del Courselist[index]
+                deletecoursefromlist(selection.courseid,selection.teacherid)
                 if "已选此课程" in selection.msg:
                     print(
                         "Please return the course %s manually, and add it again"
@@ -307,10 +462,10 @@ while True:
             break
         else:
             print("%d course(s) remaining...Wait %d sec..." %
-                  (len(Courselist), QUERY_DELAY))
+                  (len(Courselist), query_delay))
     else:
         print("No course can be selected...")
         print("%d course(s) remaining...Wait %d sec..." %
-              (len(Courselist), QUERY_DELAY))
+              (len(Courselist), query_delay))
     i += 1
-    time.sleep(QUERY_DELAY)
+    time.sleep(query_delay)
