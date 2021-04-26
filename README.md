@@ -32,18 +32,18 @@ Use a text editor and open `courses.txt`
 
 All the config items are explained in the table below
 
-| Module    	| Variable         	| Comment                 |
-|------------	|------------------	|------------------------|
-| [Userinfo] 	| user             	| Username of your account |
-| [Userinfo] 	| password         	| Your password 	       |
-| [Userinfo] 	| encryptpassword  	| Encrypted password   	  |
-| [Settings] 	| term             	| Term of course selection |
-| [Settings] 	| querydelay       	| Delay of updating course information |
-| [Settings] 	| checkselectdelay 	| Delay of checking selection time |
+| Module    	| Variable         	| Comment                                                                 |
+|------------	|------------------	|------------------------------------------------------------------------ |
+| [Userinfo] 	| user             	| Username of your account                                                |
+| [Userinfo] 	| password         	| Your password 	                                                        |
+| [Userinfo] 	| encryptpassword  	| Encrypted password   	                                                  |
+| [Settings] 	| term             	| Term of course selection                                                |
+| [Settings] 	| querydelay       	| Delay of updating course information                                    |
+| [Settings] 	| checkselectdelay 	| Delay of checking selection time                                        |
 | [Settings] 	| warndiffcampus   	| Whether warn if you selected courses in a diffrent campus as you are in |
-| [Courses]  	| course1          	| Course information: Course id,Teaher id  |
-| [Courses]  	| course2          	| Same as above             |
-|            	| ...              	|      	                  |
+| [Courses]  	| course1          	| Course information: Course id,Teaher id                                 |
+| [Courses]  	| course2          	| Same as above                                                           |
+|            	| ...              	|      	                                                                 |
 
 #### **Notice**
  - All configuration should be entered after the char "=" in a single line
@@ -58,7 +58,6 @@ All the config items are explained in the table below
 python SCourseHelper.py
 ```
 Once you entered/configured all the relevant information, the program will automatically start to function
-在输入相关信息或者编辑配置后，程序将自动运行尝试选课/蹲课
 
 ### **Information Required**
 1. `User:`
