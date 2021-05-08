@@ -11,7 +11,7 @@ import rsa
 
 
 # Settings
-query_delay = 5
+query_delay = 1.5
 chk_select_time_delay = 5
 warn_diff_campus = True
 CONFIGPATH="courses.txt"
@@ -25,17 +25,11 @@ password=""
 encryptedpassword=""
 sterm=0
 
-
 # Declaration
 Termitem = namedtuple("Term", ["termid", "name"])
-Courseinfo = namedtuple("CourseInfo", [
-    "courseid", "coursename", "teacherid", "teachername", "capacity", "number",
-    "restriction"
-])
+Courseinfo = namedtuple("CourseInfo", ["courseid", "coursename", "teacherid", "teachername", "capacity", "number","restriction"])
 Courseitem = namedtuple("CourseItem", ["courseid", "teacherid"])
-Selectionresult = namedtuple(
-    "SelectionResult",
-    ["courseid", "coursename", "teacherid", "teachername", "msg", "isSuccess"])
+Selectionresult = namedtuple("SelectionResult",["courseid", "coursename", "teacherid", "teachername", "msg", "isSuccess"])
 
 # Base Urls
 _baseurl = "http://xk.autoisp.shu.edu.cn/"
@@ -47,13 +41,14 @@ _selectcourse = "CourseSelectionStudent/CourseSelectionSave"
 _diffcampus = "CourseSelectionStudent/VerifyDiffCampus"
 _selectedcourse = "CourseSelectionStudent/QueryCourseTable"
 _dropcourse = "CourseReturnStudent/CourseReturnSave"
+_baseerror = "Base/Error"
 
 # SSO Pubkey
 _keystr = '''-----BEGIN PUBLIC KEY-----
     MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDl/aCgRl9f/4ON9MewoVnV58OLOU2ALBi2FKc5yIsfSpivKxe7A6FitJjHva3WpM7gvVOinMehp6if2UNIkbaN+plWf5IwqEVxsNZpeixc4GsbY9dXEk3WtRjwGSyDLySzEESH/kpJVoxO7ijRYqU+2oSRwTBNePOk1H+LRQokgQIDAQAB
     -----END PUBLIC KEY-----'''
 
-def initconfig():
+def initconfig():   #write a default config
     config=configparser.ConfigParser(allow_no_value=True)
     config["Userinfo"]={}
     config["Userinfo"]["user"]=""
@@ -61,7 +56,7 @@ def initconfig():
     config["Userinfo"]["encryptpassword"]=""
     config["Settings"]={}
     config["Settings"]["term"]=""
-    config["Settings"]["querydelay"]="5"
+    config["Settings"]["querydelay"]="1.5"
     config["Settings"]["checkselectdelay"]="5"
     config["Settings"]["warndiffcampus"]="1"
     config["Courses"]={}
@@ -75,7 +70,7 @@ def initconfig():
     except:
         print("Unable to initialize config")
 
-def readconfig():
+def readconfig():   #read config from file
     config=configparser.ConfigParser(allow_no_value=True)
     try:
         config.read(CONFIGPATH)
@@ -92,12 +87,12 @@ def readconfig():
     encryptedpassword=userinfo.get("encryptpassword","")
     sterm=settings.get("term","")
     try:
-        query_delay = int(settings.get("querydelay","5"))
+        query_delay = float(settings.get("querydelay","1.5"))
     except:
         print("Warning: config of querydelay is invalid, set to default..")
-        query_delay = 5
+        query_delay = 1.5
     try:
-        chk_select_time_delay = int(settings.get("checkselectdelay","5"))
+        chk_select_time_delay = float(settings.get("checkselectdelay","5"))
     except:
         print("Warning: config of checkselectdelay is invalid, set to default..")
         chk_select_time_delay = 5
@@ -116,7 +111,7 @@ def readconfig():
             else:
                 inputlist.append(Courseitem._make(s.split(",")))
         
-def writeepwd():
+def writeepwd():    #write encrypted password to config
     config=configparser.ConfigParser(allow_no_value=True)
     config.read(CONFIGPATH)
     config["Userinfo"]["user"]=username
@@ -128,7 +123,7 @@ def writeepwd():
     except:
         print("Error: Unable to write config")
 
-def writeterm():
+def writeterm():    #write current termid to config
     config=configparser.ConfigParser(allow_no_value=True)
     config.read(CONFIGPATH)
     config["Settings"]["term"]=sterm
@@ -154,7 +149,7 @@ def encryptPass(passwd):
                                               pubkey)).decode()
     return encryptpwd
 
-def getTerms(text):
+def getTerms(text): #analyze terms from text
     html = lxml.etree.HTML(text)
     termslist = html.xpath("//table/tr[@name='rowterm']")
     terms = []
@@ -164,7 +159,7 @@ def getTerms(text):
         terms.append(Termitem(termid, name))
     return terms
 
-def deletecoursefromlist(cid,tid):
+def deletecoursefromlist(cid,tid):  #delete an item from list
     global Courselist
     for index, item in enumerate(Courselist):
         if (item.courseid == cid) and (item.teacherid == tid):
@@ -173,7 +168,7 @@ def deletecoursefromlist(cid,tid):
             raise ValueError("Unexpected Result")
     del Courselist[index]
 
-def getCourseInfo(cid, tid, sess):
+def getCourseInfo(cid, tid, sess):  #query course info by cid and tid
     params = {
         "PageIndex": 1,
         "PageSize": 1,
@@ -206,7 +201,7 @@ def getCourseInfo(cid, tid, sess):
                       restriction=td[10].text.strip() if td[10].text else "")
 
 
-def canSelect(cinfo):
+def canSelect(cinfo):   #judge whether a course can be selected
     if cinfo.restriction:
         return False
     #if cinfo.capacity==0:return False
@@ -225,7 +220,15 @@ def checkDiffCampus(param, sess):
     return
 
 
-def selectCourse(courses, sess):
+def returnCourse(course, sess): #return one course at a time
+    params = {}
+    params["cids"] = course.courseid
+    params["tnos"] = course.teacherid
+    r = sess.post(_baseurl + _dropcourse, params)
+    return ("退课成功" in r.text)
+
+
+def selectCourse(courses, sess):    #select a list of courses
     params = {}
     i = 0
     for course in courses:
@@ -263,7 +266,7 @@ def selectCourse(courses, sess):
     return result
 
 
-def isSelectTime(sess):
+def isSelectTime(sess): #judge whether it is selection time
     r = sess.get(_baseurl + _fastinput)
     if "非本校区提示" in r.text:
         return True
@@ -271,7 +274,7 @@ def isSelectTime(sess):
         return False
 
 
-def selectTerm(term, sess):
+def selectTerm(term, sess): #select the term
     global sterm
     sterm=term
     r = sess.post(_baseurl + _termselect, {"termId": term})
@@ -287,11 +290,8 @@ def selectTerm(term, sess):
 def login(username, encryptpwd):
     print("Logging in...")
     session = requests.Session()
-    
-    
     r = session.get(_baseurl)
-    '''if r.url.startswith(_baseurl):
-        return session'''
+
     if not r.url.startswith(
             ("https://oauth.shu.edu.cn/", "https://newsso.shu.edu.cn/")):
         raise RuntimeError(1, f"Unexpected Result")
@@ -349,6 +349,7 @@ else:
     print("User:%s"%username)
 if password=="" and encryptedpassword=="":
     password = getpass.getpass("Password:")
+
 if encryptedpassword!="":
     s = login(username, encryptedpassword)
 else:
@@ -359,7 +360,7 @@ else:
 
 if not isSelectTime(s):
     i = 0
-    print("Not Selection Time...Wait %d sec..." % chk_select_time_delay)
+    print("Not Selection Time...Wait %.2f sec..." % chk_select_time_delay)
     while True:
         print("Retry Times: " + str(i), end='\r')
         time.sleep(chk_select_time_delay)
@@ -406,9 +407,9 @@ for pair in inputlist:
         break
     course = getCourseInfo(pair.courseid, pair.teacherid, s)
     Courselist.append(course)
-    print("%s(%s) by %s(%s) : %d/%d" %
+    print("%s(%s) by %s(%s) : %d/%d %s" %
           (course.coursename, course.courseid, course.teachername,
-           course.teacherid, course.number, course.capacity))
+           course.teacherid, course.number, course.capacity, course.restriction))
 print("-------------------------", end="\n\n")
 SubmitList = []
 i = 0
@@ -427,9 +428,9 @@ while True:
                 number=course.number)
             Courselist[index] = Courselist[index]._replace(
                 capacity=course.capacity)
-            print("%s(%s) by %s(%s) : %d/%d" %
+            print("%s(%s) by %s(%s) : %d/%d %s" %
                   (course.coursename, course.courseid, course.teachername,
-                   course.teacherid, course.number, course.capacity))
+                   course.teacherid, course.number, course.capacity, course.restriction))
         print("-------------------------", end="\n\n")
 
     SubmitList.clear()
@@ -461,11 +462,11 @@ while True:
             print("Task done!")
             break
         else:
-            print("%d course(s) remaining...Wait %d sec..." %
+            print("%d course(s) remaining...Wait %.2f sec..." %
                   (len(Courselist), query_delay))
     else:
         print("No course can be selected...")
-        print("%d course(s) remaining...Wait %d sec..." %
+        print("%d course(s) remaining...Wait %.2f sec..." %
               (len(Courselist), query_delay))
     i += 1
     time.sleep(query_delay)
