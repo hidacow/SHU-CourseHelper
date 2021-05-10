@@ -5,7 +5,7 @@ encryptpassword=
 
 [Settings]
 term=20205
-querydelay=5
+querydelay=1.5
 checkselectdelay=5
 warndiffcampus=1
 

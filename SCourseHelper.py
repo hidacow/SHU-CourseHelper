@@ -28,7 +28,7 @@ sterm=0
 # Declaration
 Termitem = namedtuple("Term", ["termid", "name"])
 Courseinfo = namedtuple("CourseInfo", ["courseid", "coursename", "teacherid", "teachername", "capacity", "number","restriction"])
-Courseitem = namedtuple("CourseItem", ["courseid", "teacherid"])
+Courseitem = namedtuple("CourseItem", ["courseid", "teacherid", "replacecid", "replacetid"])
 Selectionresult = namedtuple("SelectionResult",["courseid", "coursename", "teacherid", "teachername", "msg", "isSuccess"])
 
 # Base Urls
@@ -102,14 +102,21 @@ def readconfig():   #read config from file
         print("Warning: config of warndiffcampus is invalid, set to default..")
         warn_diff_campus = True
     
-    for i in range(1,10):
+    i=0
+    while True:
+        i+=1
         s=courses.get("course%d"%i,"")
         if s!="":
             a=s.split(",")
             if len(a)!=2 or len(a[0])!=8 or len(a[1])!=4:
-                print(s+" is not a valid course format")
-            else:
-                inputlist.append(Courseitem._make(s.split(",")))
+                if len(a)!=4 or len(a[2])!=8 or len(a[3])!=4:
+                    print(s+" is not a valid course format")
+                    continue
+            if len(a)==2:
+                s=s+",null,null"
+            inputlist.append(Courseitem._make(s.split(",")))
+        else:
+            break
         
 def writeepwd():    #write encrypted password to config
     config=configparser.ConfigParser(allow_no_value=True)
@@ -160,13 +167,24 @@ def getTerms(text): #analyze terms from text
     return terms
 
 def deletecoursefromlist(cid,tid):  #delete an item from list
-    global Courselist
-    for index, item in enumerate(Courselist):
+    global inputlist
+    index=findcourseinlist(cid,tid,inputlist)
+    if(index!=-1):
+        del inputlist[index]
+    else:
+        raise ValueError("Unexpected Result")
+
+def findcourseinlist(cid,tid,listitem):  #find the item in a list given cid and tid
+    for index,item in enumerate(listitem):
         if (item.courseid == cid) and (item.teacherid == tid):
-            break
-        else:
-            raise ValueError("Unexpected Result")
-    del Courselist[index]
+            return index
+    return -1
+
+def findreplaceinlist(cid,tid): #find the item in the inputlist given replacecid and replacetid
+    for index,item in enumerate(inputlist):
+        if (item.replacecid == cid) and (item.replacetid == tid):
+            return index
+    return -1
 
 def getCourseInfo(cid, tid, sess):  #query course info by cid and tid
     params = {
@@ -220,20 +238,23 @@ def checkDiffCampus(param, sess):
     return
 
 
-def returnCourse(course, sess): #return one course at a time
-    params = {}
-    params["cids"] = course.courseid
-    params["tnos"] = course.teacherid
-    r = sess.post(_baseurl + _dropcourse, params)
-    return ("退课成功" in r.text)
+def returnCourse(courses, sess): #return a list of courses
+    datastr=""
+    for course in courses:
+        datastr+=("&cids="+course.replacecid)
+    for course in courses:
+        datastr+=("&tnos="+course.replacetid)
+    headers = {'Content-type': 'application/x-www-form-urlencoded; charset=UTF-8'}
+    r = sess.post(_baseurl + _dropcourse, data=datastr[1:],headers=headers)
+    return ("退课成功" in r.text) and (not "无此教学班数据" in r.text) and (not "未选此教学班" in r.text)   #TODO: verify the result of each course
 
 
 def selectCourse(courses, sess):    #select a list of courses
     params = {}
     i = 0
     for course in courses:
-        if not canSelect(course):
-            continue
+        #if not canSelect(course):
+        #    continue
         params["cids[%d]" % i] = course.courseid
         params["tnos[%d]" % i] = course.teacherid
         i += 1
@@ -290,6 +311,7 @@ def selectTerm(term, sess): #select the term
 def login(username, encryptpwd):
     print("Logging in...")
     session = requests.Session()
+    
     r = session.get(_baseurl)
 
     if not r.url.startswith(
@@ -338,11 +360,12 @@ def login(username, encryptpwd):
             return selectTerm(Termlist[0].termid, session)
 
 
-print("SCourseHelper V1.0")
+print("SCourseHelper V1.1")
 print()
 
 readconfig()
 print()
+
 if username=="":
     username = input("User:")
 else:
@@ -373,7 +396,7 @@ if len(inputlist)==0:
     #inputlist = eval(input("Enter the course list:"))
     i=1
     print("Please enter the info of courses, enter nothing to finish")
-    while i<10:
+    while True:
         a=input("Enter the course  id of course %d :"%i)
         
         if (a==""):
@@ -396,77 +419,114 @@ if len(inputlist)==0:
         if(len(b)!=4):
             print("Invalid input, please enter again")
             continue
-        inputlist.append(Courseitem(a,b))
+        inputlist.append(Courseitem(a,b,"null","null"))
         i+=1
-    
-print("Checking %d Courses"%len(inputlist), end="\n\n")
-print("-------------------------")
-for pair in inputlist:
-    if len(Courselist) == 9:
-        print("Max 9 items supported, items exceeding limits will be ignored")
-        break
-    course = getCourseInfo(pair.courseid, pair.teacherid, s)
-    Courselist.append(course)
-    print("%s(%s) by %s(%s) : %d/%d %s" %
-          (course.coursename, course.courseid, course.teachername,
-           course.teacherid, course.number, course.capacity, course.restriction))
-print("-------------------------", end="\n\n")
-SubmitList = []
-i = 0
-First = True
-while True:
-    if First:
-        First = False
-    else:
-        clear()
-        print("Retry:%d" % i)
-        print("-------------------------")
-        for index in range(len(Courselist)):
-            course = getCourseInfo(
-                course.courseid, course.teacherid, s)  # refresh info
-            Courselist[index] = Courselist[index]._replace(
-                number=course.number)
-            Courselist[index] = Courselist[index]._replace(
-                capacity=course.capacity)
-            print("%s(%s) by %s(%s) : %d/%d %s" %
-                  (course.coursename, course.courseid, course.teachername,
-                   course.teacherid, course.number, course.capacity, course.restriction))
-        print("-------------------------", end="\n\n")
 
-    SubmitList.clear()
-    for course in Courselist:
+SubmitList = []
+DropList = []
+i=0    
+while True:
+    if i>0:
+        #clear()
+        print()
+        print('#'*50)
+        print()
+        print("Retry:%d" % i)
+        SubmitList.clear()
+        DropList.clear()
+    
+    print("Checking %d Courses"%len(inputlist), end="\n\n")
+    print("-------------------------")
+    for item in inputlist:
+        course = getCourseInfo(item.courseid, item.teacherid, s)
+        print("%s(%s) by %s(%s) : %d/%d %s" %(course.coursename, course.courseid, course.teachername,course.teacherid, course.number, course.capacity, course.restriction),end="")
         if canSelect(course):
-            print("%s(%s) by %s(%s) can be selected!!" %
-                  (course.coursename, course.courseid, course.teachername,
-                   course.teacherid))
-            SubmitList.append(course)
+            print("... can be selected!!")
+            SubmitList.append(item)
+            if item.replacecid!="null":
+                DropList.append(item)
+                SubmitList.append(Courseitem(item.replacecid,item.replacetid,"backup","backup"))    #select it back in case of failure
+        else:
+            print("")
+    print("-------------------------", end="\n\n")
+
     if len(SubmitList) > 0:
-        print("Trying to select the courses above...", end="\n\n")
-        result = selectCourse(SubmitList, s)
-        for selection in result:
-            print("%s(%s) by %s(%s) : %s" %
-                  (selection.coursename, selection.courseid,
-                   selection.teachername, selection.teacherid, selection.msg))
-            if selection.isSuccess or ("已选此课程" in selection.msg) or ("课时冲突" in selection.msg):
-                deletecoursefromlist(selection.courseid,selection.teacherid)
-                if "已选此课程" in selection.msg:
-                    print(
-                        "Please return the course %s manually, and add it again"
-                        % selection.coursename)
-                if "课时冲突" in selection.msg:
-                    print(
-                        "Please change courses conflicting with %s manually, and add it again"
-                        % selection.coursename)
+        print("Trying to select %d course(s)..." % (len(SubmitList)-len(DropList)), end="\n\n")
+        dropsuccess=0
+        if len(DropList) > 0:   #Drop the replace courses first
+            print("Need to drop %d course(s)..." % len(DropList) , end="")
+            if returnCourse(DropList,s):
+                print("Success")
+                dropsuccess=1
+            else:
+                print("Failed, continue anyway")
+                dropsuccess=-1
+        
+        print()
+        result = selectCourse(SubmitList, s)    
+        for item in SubmitList:
+            rid=findcourseinlist(item.courseid,item.teacherid,result)   #find in result
+            selection=result[rid]
+            if item.replacecid!="null" and item.replacecid!="backup": #Has backup
+                rid2=findcourseinlist(item.replacecid,item.replacetid,result)   #Find the result of backup selection
+                #if selection is success and backupselection is not success: replacement successful, delete from task
+                #if selection failed but backup selection is success: replacement not successful, continue loop
+                #if selection and backup both failed: continue loop
+                if selection.isSuccess:
+                    print("%s(%s) by %s(%s) : %s" %(selection.coursename, selection.courseid,selection.teachername, selection.teacherid, selection.msg))
+                    if not result[rid2].isSuccess:  #Best situation
+                        print("Previously selected course %s(%s) by %s(%s) had been automatically returned"%(result[rid2].coursename, result[rid2].courseid,result[rid2].teachername, result[rid2].teacherid))
+                    else:    #Exceptional situation: User entered two courses that are not conflicting, TODO(maybe):return the unwanted course
+                        print("%s(%s) by %s(%s) : %s" %(result[rid2].coursename, result[rid2].courseid,result[rid2].teachername, result[rid2].teacherid, result[rid2].msg))
+                        print("The two courses are not conflicting, both are selected, you might want to manually return one of them")
+                    deletecoursefromlist(selection.courseid,selection.teacherid)    #remove from task due to success
+                else: #not selection.isSuccess
+                    print("%s(%s) by %s(%s) : %s" %(selection.coursename, selection.courseid,selection.teachername, selection.teacherid, selection.msg))
+                    print("%s(%s) by %s(%s) : %s" %(result[rid2].coursename, result[rid2].courseid,result[rid2].teachername, result[rid2].teacherid, result[rid2].msg))
+                    if result[rid2].isSuccess: 
+                        print("Course replacement failed, the course you previously selected had been selected back")
+                        print("The program will continue trying to replace the course")
+                    else:   #Exceptional or Unfortunate situation: Both courses are dropped
+                        if ("无此教学班数据" in result[rid2].msg):
+                            print("Invalid Return Course Data")
+                            deletecoursefromlist(selection.courseid,selection.teacherid)    #remove original item first
+                            inputlist.append(Courseitem(item.courseid,item.teacherid,"null","null"))  #add an item without replacement
+                        else:
+                            if ("已选此课程" in selection.msg) or ("课时冲突" in selection.msg):
+                                if dropsuccess==1:#drop success
+                                    print("Seems impossible to replace course, please check selection strategy and retry")
+                                    deletecoursefromlist(selection.courseid,selection.teacherid)    #discontinue
+                                if dropsuccess==-1:
+                                    print("It seems that the error relates to failure in returning courses, the program will retry")
+                            else:
+                                print("Unfortunately, failed to select both courses, trying to select either of the courses")
+                                deletecoursefromlist(selection.courseid,selection.teacherid)    #remove original item first
+                                inputlist.append(Courseitem(item.courseid,item.teacherid,"null","null"))  #add an item without replacement
+                                inputlist.append(Courseitem(item.replacecid,selection.replacetid,"null","null"))    #add the orignal course to tasks       
+            else:
+                if item.replacecid!="backup":
+                    print("%s(%s) by %s(%s) : %s" %(selection.coursename, selection.courseid,selection.teachername, selection.teacherid, selection.msg))
+                    if selection.isSuccess or ("已选此课程" in selection.msg) or ("课时冲突" in selection.msg):
+                        deletecoursefromlist(selection.courseid,selection.teacherid)    #success or need user actions, discontinue
+                        if "已选此课程" in selection.msg:
+                            print("Please return the course %s manually, and add it again"% selection.coursename)
+                            print("You may also edit the config to let the program automatically return conflicting courses")
+                        if "课时冲突" in selection.msg:
+                            print("Please change courses conflicting with %s manually, and add it again"% selection.coursename)
+                            print("You may also edit the config to let the program automatically return conflicting courses")
+                #else is backup, ok to skip
+            del result[rid]
             print()
-        if len(Courselist) == 0:
+
+        #Judge task progress
+        if len(inputlist) == 0:
             print("Task done!")
             break
-        else:
-            print("%d course(s) remaining...Wait %.2f sec..." %
-                  (len(Courselist), query_delay))
     else:
         print("No course can be selected...")
-        print("%d course(s) remaining...Wait %.2f sec..." %
-              (len(Courselist), query_delay))
+    
+    print("%d course(s) remaining...Wait %.2f sec..." % (len(inputlist), query_delay))
     i += 1
     time.sleep(query_delay)
+
+
