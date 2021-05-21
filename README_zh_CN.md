@@ -68,6 +68,7 @@ python -m pip install -r requirements.txt
  - 若`encryptpassword`不为空时，程序会忽略`password`的值
  - 程序会忽略格式不正确的配置
  - 在进行新学期选课时，可能需要更改`term`的值，或将其清空
+ - 当程序在运行时，请勿在其它处登录选课系统
 
 ### **运行程序**
 ```bash

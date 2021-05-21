@@ -53,7 +53,7 @@ All the config items are explained in the table below
    
       The program will select course no.`00874008`, teacher no.`1001`
 
-   2. Advanced mode：`课程号,教师号,待替换课程号,待替换教师号`
+   2. Advanced mode：`Course id,Teacher id or Course id,Teacher id,Replace Course id,Replace Teacher id`
 
       Example: `00874008,1001,00874008,1002`
    
@@ -67,11 +67,12 @@ All the config items are explained in the table below
 
 
 #### **Notice**
- - All configuration should be entered after the char "=" in a single line
- - It is recommended to only store encrypted password in case of leaking sensitive information
- - When `encryptpassword` is set，the program will neglect the value of `password`
- - The program will neglect invalid values in config
- - When a new term starts, you may need to change the value of `term`, or simply clear it
+ - All configuration should be entered after the char "=" in a single line.
+ - It is recommended to only store encrypted password in case of leaking sensitive information.
+ - When `encryptpassword` is set，the program will neglect the value of `password`.
+ - The program will neglect invalid values in config.
+ - When a new term starts, you may need to change the value of `term`, or simply clear it.
+ - You may not log in to the course selection system elsewhere while the program is running.
 
 ### **Run the Program**
 ```bash
