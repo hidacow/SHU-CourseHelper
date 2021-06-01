@@ -8,6 +8,7 @@ term=
 querydelay=1.5
 checkselectdelay=5
 warndiffcampus=1
+autoclearscreen=1
 
 [Courses]
 course1=
