@@ -39,9 +39,10 @@ All the config items are explained in the table below
 | [Userinfo] 	| password         	| Your password 	                                                        |
 | [Userinfo] 	| encryptpassword  	| Encrypted password   	                                                  |
 | [Settings] 	| term             	| Term of course selection                                                |
-| [Settings] 	| querydelay       	| Delay of updating course information                                    |
-| [Settings] 	| checkselectdelay 	| Delay of checking selection time                                        |
-| [Settings] 	| warndiffcampus   	| Whether warn if you selected courses in a diffrent campus as you are in |
+| [Settings] 	| querydelay       	| Delay of updating course information (sec)                              |
+| [Settings] 	| checkselectdelay 	| Delay of checking selection time     (sec)                              |
+| [Settings] 	| warndiffcampus   	| Whether warn if you selected courses in a diffrent campus as you are in (non-zero:True, 0:False)|
+| [Settings] 	| autoclearscreen   	| Whether clear screen after every retry (non-zero:True,  0:False)|
 | [Courses]  	| course1          	| Course information: Course id,Teacher id or Course id,Teacher id,Replace Course id,Replace Teacher id|
 | [Courses]  	| course2          	| Same as above                                                           |
 |            	| ...              	|      	                                                                 |
@@ -78,6 +79,12 @@ All the config items are explained in the table below
 ```bash
 python SCourseHelper.py
 ```
+You may save log file by editting the `autoclearscreen` item in config to `0` and run the program with
+```bash
+python SCourseHelper.py >> log.txt
+```
+However, by doing so the program will run in background and you may not see the output in the console/terminal
+
 Once you entered/configured all the relevant information, the program will automatically start to function
 
 ### **Information Required**
@@ -113,4 +120,5 @@ Once you entered/configured all the relevant information, the program will autom
 
    The courses entered when prompted will be selected in the normal mode for the time being.
 
-
+### **Contribute**
+You can star this project, create issues, discussion threads or [buy me a cup of coffee](https://ishs.gq/jz.html)

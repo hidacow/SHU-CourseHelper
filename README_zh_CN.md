@@ -34,10 +34,11 @@ python -m pip install -r requirements.txt
 | [Userinfo] 	| user             	| 用户名                   |
 | [Userinfo] 	| password         	| 密码 	                   |
 | [Userinfo] 	| encryptpassword  	| 加密的密码           	  |
-| [Settings] 	| term             	| 选课学期 	              |
-| [Settings] 	| querydelay       	| 更新课程信息延时	       |
-| [Settings] 	| checkselectdelay 	| 查询选课开始延时 	       |
-| [Settings] 	| warndiffcampus   	| 是否提示选课跨校区       |
+| [Settings] 	| term             	| 选课学期代码 	              |
+| [Settings] 	| querydelay       	| 更新课程信息延时 (秒)	       |
+| [Settings] 	| checkselectdelay 	| 查询选课开始延时 (秒) 	       |
+| [Settings] 	| warndiffcampus   	| 是否提示选课跨校区 (非0: 是, 0: 否)       |
+| [Settings] 	| autoclearscreen   	| 是否在每次刷新课程信息时清屏 (非0: 是, 0: 否)|
 | [Courses]  	| course1          	| 课程信息：课程号,教师号 或 课程号,教师号,待替换课程号,待替换教师号  |
 | [Courses]  	| course2          	| 同上                    |
 |            	| ...              	|      	                  |
@@ -74,6 +75,12 @@ python -m pip install -r requirements.txt
 ```bash
 python SCourseHelper.py
 ```
+你可以通过将配置文件中的 `autoclearscreen`项设为 `0` 并执行以下命令来保存程序运行日志
+```bash
+python SCourseHelper.py >> log.txt
+```
+不过这种方法会使程序后台运行且不输出到终端上
+
 在输入相关信息或者编辑配置后，程序将自动运行尝试选课/蹲课
 
 ### **程序运行时可能需要您提供的信息**
@@ -111,3 +118,5 @@ python SCourseHelper.py
 
    程序中输入的课程信息选课目前仅支持普通模式
 
+### **支持**
+欢迎点Star，提issue，讨论或[扫码捐助](https://ishs.gq/jz.html)

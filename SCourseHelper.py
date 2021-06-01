@@ -13,6 +13,7 @@ import rsa
 # Settings
 query_delay = 1.5
 chk_select_time_delay = 5
+auto_cls = True
 warn_diff_campus = True
 CONFIGPATH="courses.txt"
 
@@ -59,6 +60,7 @@ def initconfig():   #write a default config
     config["Settings"]["querydelay"]="1.5"
     config["Settings"]["checkselectdelay"]="5"
     config["Settings"]["warndiffcampus"]="1"
+    config["Settings"]["autoclearscreen"]="1"
     config["Courses"]={}
     for i in range(1,10):
         config["Courses"]["course%d"%i]=""
@@ -81,7 +83,7 @@ def readconfig():   #read config from file
         initconfig()
         return
     courses=config["Courses"]
-    global username,password,encryptedpassword,sterm,query_delay,chk_select_time_delay,warn_diff_campus,inputlist #use global in order to modify global values
+    global username,password,encryptedpassword,sterm,query_delay,chk_select_time_delay,warn_diff_campus,inputlist,auto_cls #use global in order to modify global values
     username=userinfo.get("user","")
     password=userinfo.get("password","")
     encryptedpassword=userinfo.get("encryptpassword","")
@@ -101,6 +103,11 @@ def readconfig():   #read config from file
     except:
         print("Warning: config of warndiffcampus is invalid, set to default..")
         warn_diff_campus = True
+    try:
+        auto_cls = bool(int(settings.get("autoclearscreen","1")))
+    except:
+        print("Warning: config of warndiffcampus is invalid, set to default..")
+        auto_cls = True
     
     i=0
     while True:
@@ -366,6 +373,7 @@ print()
 readconfig()
 print()
 
+
 if username=="":
     username = input("User:")
 else:
@@ -427,7 +435,8 @@ DropList = []
 i=0    
 while True:
     if i>0:
-        #clear()
+        if auto_cls:
+            clear()
         print()
         print('#'*50)
         print()
@@ -435,7 +444,7 @@ while True:
         SubmitList.clear()
         DropList.clear()
     
-    print("Checking %d Courses"%len(inputlist), end="\n\n")
+    print("Checking %d course(s)"%len(inputlist), end="\n\n")
     print("-------------------------")
     for item in inputlist:
         course = getCourseInfo(item.courseid, item.teacherid, s)
@@ -495,6 +504,9 @@ while True:
                             if ("已选此课程" in selection.msg) or ("课时冲突" in selection.msg):
                                 if dropsuccess==1:#drop success
                                     print("Seems impossible to replace course, please check selection strategy and retry")
+                                    deletecoursefromlist(selection.courseid,selection.teacherid)    #discontinue
+                                if dropsuccess==-1 and ("已选此课程" in result[rid2].msg) or ("课时冲突" in result[rid2].msg):
+                                    print("Seems unable to select the original course back, did you select it?")
                                     deletecoursefromlist(selection.courseid,selection.teacherid)    #discontinue
                                 if dropsuccess==-1:
                                     print("It seems that the error relates to failure in returning courses, the program will retry")
