@@ -10,7 +10,7 @@ This program can refresh pages of SHU Course Selection System automatically and 
 
 If it is not selection time or the target courses are full, the program will update information automatically and try to select them if possible.
 
-[New]If the targeted course is conflicting with currently selected courses, you can **edit the config** and let the program return the courses automatically in order to select the targeted course.
+If the targeted course is conflicting with currently selected courses, you can let the program return the courses automatically in order to select the targeted course.
 
 ## **Quick Start**
 
@@ -68,7 +68,7 @@ All the config items are explained in the table below
 
 - The courses to be selected must be valid in the system and not duplicated, or the program will run into error
 - In the second mode, when the target course can be selected, the program will automatically return the replace courese and select the target course. Meantime, the returned course will be selected again in case that the course was selected by others.
-- However, there is still possibility that both course are failed to select, use this feature at your own risk.
+- However, there is still possibility that both courses are failed to select, use this feature at your own risk.
 - Course information items should be the form of `course`+number, you may add items like `course10=`,`course11=`... if needed.
 
 #### **Notice**
@@ -78,7 +78,8 @@ All the config items are explained in the table below
 - When `encryptpassword` is set，the program will neglect the value of `password`.
 - The program will neglect invalid values in config.
 - When a new term starts, you may need to change the value of `term`, or simply clear it.
-- You may not log in to the course selection system elsewhere while the program is running.
+- It is not recommended to log in to the course selection system elsewhere while the program is running.
+- [New] The program will be able to handle if you logged in elsewhere
 
 ### **Run the Program**
 
@@ -126,9 +127,21 @@ Once you entered/configured all the relevant information, the program will autom
 
    Enter the 4-digit teacher id
 
-   Please make sure that all the information you input is correct, or the program will return an error
+   `Do you want to replace a course you have selected with this one?`
 
-   The courses entered when prompted will be selected in the normal mode for the time being.
+   Enter `Y` to use Advanced Mode features or enter `N` or nothing to skip
+
+   `Enter the course id of the course to replace :`
+
+   Enter the 8-digit course id
+
+   `Enter the teacher id of the course to replace :`
+
+   Enter the 4-digit teacher id
+
+   If you want to quit entering information, enter nothing when prompted to enter information of next course
+
+   Please make sure that all the information you input is correct, or the program will return an error
 
 ### **Contribute**
 

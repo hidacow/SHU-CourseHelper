@@ -127,6 +127,7 @@ def readconfig():  # read config from file
             inputlist.append(Courseitem._make(s.split(",")))
         else:
             break
+    print("OK")
 
 
 def writeepwd():  # write encrypted password to config
@@ -248,6 +249,9 @@ def canSelect(cinfo):  # judge whether a course can be selected
 
 def checkDiffCampus(param, sess):
     r = sess.post(_baseurl + _diffcampus, param)
+    if _termindex in r.url:
+        print("Error: Did not select term!")
+        return
     if "没有非本校区课程" not in r.text:
         print("Warning: The location of some courses are in another campus")
         print("Course Selection will proceed anyway")
@@ -281,6 +285,10 @@ def selectCourse(courses, sess):  # select a list of courses
     if warn_diff_campus:
         checkDiffCampus(params, sess)
     r = sess.post(_baseurl + _selectcourse, params)
+    while("未指定当前选课学期！" in r.text):
+        print("You have logged in elsewhere:(  Need to select term first...")
+        sess=selectTerm(sterm,sess,False)
+        r = sess.post(_baseurl + _selectcourse, params)
     html = lxml.etree.HTML(r.text)
     table_rows = html.xpath("//table/tr/td/..")
     if len(table_rows) <= 1:
@@ -301,6 +309,7 @@ def selectCourse(courses, sess):  # select a list of courses
             result.append(item_result)
         else:
             raise RuntimeError("Cannot analyze return results")
+            
     return result
 
 
@@ -312,7 +321,7 @@ def isSelectTime(sess):  # judge whether it is selection time
         return False
 
 
-def selectTerm(term, sess):  # select the term
+def selectTerm(term, sess,dtips=True):  # select the term
     global sterm
     sterm = term
     r = sess.post(_baseurl + _termselect, {"termId": term})
@@ -320,15 +329,17 @@ def selectTerm(term, sess):  # select the term
         print("-------------------------")
     else:
         raise RuntimeError(2, f"Login Failed")
-    writeterm()
-    print("Term info has been saved, to change it or select again, please delete the value in config file", end="\n\n")
+    if dtips:
+        writeterm()
+        print("Term info has been saved, to change it or select again, please delete the value in config file", end="\n\n")
     return sess
 
 
 def login(username, encryptpwd):
+    global sterm
     print("Logging in...")
     session = requests.Session()
-
+   
     r = session.get(_baseurl)
 
     if not r.url.startswith(
@@ -377,9 +388,12 @@ def login(username, encryptpwd):
             return selectTerm(Termlist[0].termid, session)
 
 
-print("SCourseHelper V1.1")
+print("SCourseHelper V1.2")
 print()
-
+print("FREE, Open Source on https://github.com/hidacow/SHU-CourseHelper")
+print()
+print()
+print("Reading Config...",end="")
 readconfig()
 print()
 
@@ -428,12 +442,37 @@ if len(inputlist) == 0:
             if i > 1:
                 break
             else:
-                print("incomplete information, please enter again")
+                print("Incomplete information, please enter again")
                 continue
         if len(b) != 4:
             print("Invalid input, please enter again")
             continue
-        inputlist.append(Courseitem(a, b, "null", "null"))
+        c = input("Do you want to replace a course you have selected with this one?\n[Y/N(default)]:")
+        while True:
+            if c == "Y" or c == "y":
+                d = input("Enter the course  id of the course to replace :")
+                if d == "":
+                    print("Abort")
+                    c = "n"
+                    continue
+                if len(d) != 8:
+                    print("Invalid input, please enter again")
+                    continue
+                e = input("Enter the teacher id of the course to replace :")
+                if e == "":
+                    print("Incomplete information, please enter again")
+                    continue
+                if len(e) != 4:
+                    print("Invalid input, please enter again")
+                    continue
+                inputlist.append(Courseitem(a, b, d, e))
+                break
+            else:
+                if c == "N" or c == "n" or c=="":
+                    inputlist.append(Courseitem(a, b, "null", "null"))
+                    break
+                else:
+                    c = input("Please enter ""Y"" or ""N"" :")
         i += 1
 
 SubmitList = []
