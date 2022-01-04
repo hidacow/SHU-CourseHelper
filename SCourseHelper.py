@@ -231,9 +231,9 @@ def getCourseInfo(cid, tid, sess):  # query course info by cid and tid
                       coursename=td[1].text.strip(),
                       teacherid=td[3].text.strip(),
                       teachername=td[4].xpath("./span/text()")[0],
-                      capacity=int(td[7].text.strip()),
-                      number=int(td[8].text.strip()),
-                      restriction=td[10].text.strip() if td[10].text else "")
+                      capacity=int(td[8].text.strip()),
+                      number=int(td[9].text.strip()),
+                      restriction=td[11].text.strip() if td[11].text else "")
 
 
 def canSelect(cinfo):  # judge whether a course can be selected
@@ -292,7 +292,17 @@ def selectCourse(courses, sess):  # select a list of courses
     html = lxml.etree.HTML(r.text)
     table_rows = html.xpath("//table/tr/td/..")
     if len(table_rows) <= 1:
-        raise RuntimeWarning("Cannot analyze return results")
+        # Something wrong, select term first
+        sess=selectTerm(sterm,sess,False)
+        if not isSelectTime(sess):
+            print("Selection Time has ended:(\n\nQuitting...")
+            raise RuntimeError("Selection period appears to be ended")
+        r = sess.post(_baseurl + _selectcourse, params)
+        html = lxml.etree.HTML(r.text)
+        table_rows = html.xpath("//table/tr/td/..")
+        if len(table_rows) <= 1: # retry one time
+            print("Something Wrong :(")
+            raise RuntimeError("Cannot analyze return results")
 
     del table_rows[-1]  # 最后一行是 "关闭" 按钮
     result = []
@@ -325,10 +335,20 @@ def selectTerm(term, sess,dtips=True):  # select the term
     global sterm
     sterm = term
     r = sess.post(_baseurl + _termselect, {"termId": term})
-    if "姓名" in r.text:
+    if "学生信息" in r.text and "未选择" not in r.text:
         print("-------------------------")
     else:
-        raise RuntimeError(2, f"Login Failed")
+        if "切换选课学期" not in r.text:
+            print("Login Failed?")
+            raise RuntimeError(3, f"Select Term Failed")
+        else:
+            if "未选择" not in r.text:
+                print("Unexpected Error Occured. Are you Student?")
+                raise RuntimeError(9, f"User seems not a student")
+            else:
+                print("Unknown Error Occured. TermId invalid?")
+                raise RuntimeError(8, f"Select Term Failed")
+
     if dtips:
         writeterm()
         print("Term info has been saved, to change it or select again, please delete the value in config file", end="\n\n")
@@ -339,7 +359,7 @@ def login(username, encryptpwd):
     global sterm
     print("Logging in...")
     session = requests.Session()
-   
+
     r = session.get(_baseurl)
 
     if not r.url.startswith(
@@ -388,7 +408,7 @@ def login(username, encryptpwd):
             return selectTerm(Termlist[0].termid, session)
 
 
-print("SCourseHelper V1.2")
+print("SCourseHelper V1.2.1")
 print()
 print("FREE, Open Source on https://github.com/hidacow/SHU-CourseHelper")
 print()
@@ -421,12 +441,12 @@ if not isSelectTime(s):
 
 print("Selection Time OK", end="\n\n")
 if len(inputlist) == 0:
-    # inputlist = eval(input("Enter the course list:"))
     i = 1
+    print("Enter the courses in the config is recommended\n")
+
     print("Please enter the info of courses, enter nothing to finish")
     while True:
         a = input("Enter the course  id of course %d :" % i)
-
         if a == "":
             if i > 1:
                 break
