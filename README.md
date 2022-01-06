@@ -14,7 +14,7 @@ If the targeted course is conflicting with currently selected courses, you can l
 
 ## **Quick Start**
 
-This program can run on Windows, Linux and MacOS，Python installation is required.
+This program can run on Windows, Linux and MacOS, Python3 installation is required.
 
 Clone this project or download zip first.
 
@@ -67,7 +67,7 @@ All the config items are explained in the table below
       but wish to replace it with course no.`00874008`, teacher no.`1001`
 
 - The courses to be selected must be valid in the system and not duplicated, or the program will run into error
-- In the second mode, when the target course can be selected, the program will automatically return the replace courese and select the target course. Meantime, the returned course will be selected again in case that the course was selected by others.
+- In the second mode, when the target course can be selected, the program will automatically return the course to be replaced and select the target course. Meantime, the returned course will be selected again in case that the course was selected by others.
 - However, there is still possibility that both courses are failed to select, use this feature at your own risk.
 - Course information items should be the form of `course`+number, you may add items like `course10=`,`course11=`... if needed.
 
@@ -75,7 +75,7 @@ All the config items are explained in the table below
 
 - All configuration should be entered after the char "=" in a single line.
 - It is recommended to only store encrypted password in case of leaking sensitive information.
-- When `encryptpassword` is set，the program will neglect the value of `password`.
+- When `encryptpassword` is set, the program will neglect the value of `password`.
 - The program will neglect invalid values in config.
 - When a new term starts, you may need to change the value of `term`, or simply clear it.
 - It is not recommended to log in to the course selection system elsewhere while the program is running.

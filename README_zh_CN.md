@@ -12,7 +12,7 @@
 
 ## **快速开始**
 
-本项目适用于 Windows，Linux 与 MacOS，需要安装 Python 环境
+本项目适用于 Windows，Linux 与 MacOS，需要安装 Python3 环境
 
 首先先将本项目 clone 到本地/下载压缩包并解压
 
