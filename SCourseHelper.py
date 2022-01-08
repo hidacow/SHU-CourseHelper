@@ -471,7 +471,7 @@ readconfig()
 print()
 if keep_logs==True:
     logging.basicConfig(filename=LOGPATH,format=LOG_FORMAT,datefmt=DATE_FORMAT,level=logging_level)
-    print("Logging is ENABLED. Program logs can be found at " + LOGPATH)
+    print("Logging is ENABLED. Program logs can be found at %s\n" % LOGPATH)
 else:
     logging.disable(100)
 
