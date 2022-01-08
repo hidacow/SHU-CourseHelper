@@ -9,6 +9,8 @@ querydelay=1.5
 checkselectdelay=5
 warndiffcampus=1
 autoclearscreen=1
+keeplogs=1
+loglevel=2
 
 [Courses]
 course1=

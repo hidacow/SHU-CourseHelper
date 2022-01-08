@@ -12,6 +12,18 @@ If it is not selection time or the target courses are full, the program will upd
 
 If the targeted course is conflicting with currently selected courses, you can let the program return the courses automatically in order to select the targeted course.
 
+## **Version History**
+
+**Ver 1.3 (2022.1.8)**
+
+- Various fixes in program logic
+- User-friendly prompts of common errors
+- Add logging and related settings (need to update config file)
+
+**Ver 1.2.1 (2022.1.4)**
+
+- Fix parsing course queries
+
 ## **Quick Start**
 
 This program can run on Windows, Linux and MacOS, Python3 installation is required.
@@ -34,19 +46,33 @@ Use a text editor and open `courses.txt`
 
 All the config items are explained in the table below
 
-| Module     | Variable         | Comment                                                                                               |
-| ---------- | ---------------- | ----------------------------------------------------------------------------------------------------- |
-| [Userinfo] | user             | Username of your account                                                                              |
-| [Userinfo] | password         | Your password                                                                                         |
-| [Userinfo] | encryptpassword  | Encrypted password                                                                                    |
-| [Settings] | term             | Term of course selection                                                                              |
-| [Settings] | querydelay       | Delay of updating course information (sec)                                                            |
-| [Settings] | checkselectdelay | Delay of checking selection time (sec)                                                                |
-| [Settings] | warndiffcampus   | Whether warn if you selected courses in a diffrent campus as you are in (non-zero:True, 0:False)      |
-| [Settings] | autoclearscreen  | Whether clear screen after every retry (non-zero:True, 0:False)                                       |
+| Module     | Variable         | Comment                                                      |
+| ---------- | ---------------- | ------------------------------------------------------------ |
+| [Userinfo] | user             | Username of your account                                     |
+| [Userinfo] | password         | Your password                                                |
+| [Userinfo] | encryptpassword  | Encrypted password                                           |
+| [Settings] | term             | Term of course selection                                     |
+| [Settings] | querydelay       | Delay of updating course information (sec)                   |
+| [Settings] | checkselectdelay | Delay of checking selection time (sec)                       |
+| [Settings] | warndiffcampus   | Whether warn if you selected courses in a diffrent campus as you are in (non-zero:True, 0:False) |
+| [Settings] | autoclearscreen  | Whether clear screen after every retry (non-zero:True, 0:False) |
+| [Settings] | keeplogs         | Whether keep logs(non-zero:True, 0:False)                    |
+| [Settings] | loglevel         | Integer. Log level below this value will be ignored.         |
 | [Courses]  | course1          | Course information: Course id,Teacher id or Course id,Teacher id,Replace Course id,Replace Teacher id |
-| [Courses]  | course2          | Same as above                                                                                         |
-|            | ...              |                                                                                                       |
+| [Courses]  | course2          | Same as above                                                |
+|            | ...              |                                                              |
+
+Log levels is explained in the table below.
+
+| Level      | Value |
+| ---------- | ----- |
+| `CRITICAL` | 5     |
+| `ERROR`    | 4     |
+| `WARNING`  | 3     |
+| `INFO`     | 2     |
+| `DEBUG`    | 1     |
+
+The default log level is `INFO`, which is also the recommended level if you enable logging
 
 #### **Editting Course config**
 
@@ -67,8 +93,11 @@ All the config items are explained in the table below
       but wish to replace it with course no.`00874008`, teacher no.`1001`
 
 - The courses to be selected must be valid in the system and not duplicated, or the program will run into error
+
 - In the second mode, when the target course can be selected, the program will automatically return the course to be replaced and select the target course. Meantime, the returned course will be selected again in case that the course was selected by others.
+
 - However, there is still possibility that both courses are failed to select, use this feature at your own risk.
+
 - Course information items should be the form of `course`+number, you may add items like `course10=`,`course11=`... if needed.
 
 #### **Notice**
@@ -79,21 +108,17 @@ All the config items are explained in the table below
 - The program will neglect invalid values in config.
 - When a new term starts, you may need to change the value of `term`, or simply clear it.
 - It is not recommended to log in to the course selection system elsewhere while the program is running.
-- [New] The program will be able to handle if you logged in elsewhere
+- The program will be able to handle if you logged in elsewhere
+- `loglevel` must be an integer between 1 and 5.
+- Program logs will by default stored in `selection.log` and can be opened with a text editor.
 
 ### **Run the Program**
+
+Run the following command
 
 ```bash
 python SCourseHelper.py
 ```
-
-You may save log file by editting the `autoclearscreen` item in config to `0` and run the program with
-
-```bash
-python SCourseHelper.py >> log.txt
-```
-
-However, by doing so the program will run in background and you may not see the output in the console/terminal
 
 Once you entered/configured all the relevant information, the program will automatically start to function
 

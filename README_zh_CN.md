@@ -10,6 +10,18 @@
 
 若目标课程与当前已选课程冲突，可以设置使程序自动退掉指定的课并选择目标课程
 
+## **更新历史**
+
+**版本 1.3 (2022.1.8)**
+
+- 程序逻辑修复与改进
+- 对于常见的错误进行人性化提示
+- 增加日志记录功能和相关设置（可能需要更新配置文件以更改配置）
+
+**版本 1.2.1 (2022.1.4)**
+
+- Fix parsing course queries
+
 ## **快速开始**
 
 本项目适用于 Windows，Linux 与 MacOS，需要安装 Python3 环境
@@ -30,19 +42,33 @@ python -m pip install -r requirements.txt
 
 使用文本编辑器打开目录中的`courses.txt`，所有的参数作用见下表
 
-| 模块       | 变量             | 说明                                                            |
-| ---------- | ---------------- | -------------------------------------------------------------- |
-| [Userinfo] | user             | 用户名                                                         |
-| [Userinfo] | password         | 密码                                                           |
-| [Userinfo] | encryptpassword  | 加密的密码                                                     |
-| [Settings] | term             | 选课学期代码                                                   |
-| [Settings] | querydelay       | 更新课程信息延时 (秒)                                           |
-| [Settings] | checkselectdelay | 查询选课开始延时 (秒)                                           |
-| [Settings] | warndiffcampus   | 是否提示选课跨校区 (非 0: 是, 0: 否)                            |
-| [Settings] | autoclearscreen  | 是否在每次刷新课程信息时清屏 (非 0: 是, 0: 否)                   |
+| 模块       | 变量             | 说明                                                         |
+| ---------- | ---------------- | ------------------------------------------------------------ |
+| [Userinfo] | user             | 用户名                                                       |
+| [Userinfo] | password         | 密码                                                         |
+| [Userinfo] | encryptpassword  | 加密的密码                                                   |
+| [Settings] | term             | 选课学期代码                                                 |
+| [Settings] | querydelay       | 更新课程信息延时 (秒)                                        |
+| [Settings] | checkselectdelay | 查询选课开始延时 (秒)                                        |
+| [Settings] | warndiffcampus   | 是否提示选课跨校区 (非 0: 是, 0: 否)                         |
+| [Settings] | autoclearscreen  | 是否在每次刷新课程信息时清屏 (非 0: 是, 0: 否)               |
+| [Settings] | keeplogs         | 是否记录程序运行日志 (非 0: 是, 0: 否)                       |
+| [Settings] | loglevel         | 整数 小于该值对应的日志级别的日志将会被忽略                  |
 | [Courses]  | course1          | 课程信息：课程号,教师号 或 课程号,教师号,待替换课程号,待替换教师号 |
-| [Courses]  | course2          | 同上                                                           |
-|            | ...              |                                                                |
+| [Courses]  | course2          | 同上                                                         |
+|            | ...              |                                                              |
+
+日志级别在下表中列出
+
+| 级别              | 值   |
+| ----------------- | ---- |
+| `CRITICAL` (严重) | 5    |
+| `ERROR` (错误)    | 4    |
+| `WARNING` (警告)  | 3    |
+| `INFO` (信息)     | 2    |
+| `DEBUG` (调试)    | 1    |
+
+若选择开启日志记录功能，默认和推荐的日志级别是 `INFO` (信息)
 
 #### **课程信息配置说明**
 
@@ -63,8 +89,11 @@ python -m pip install -r requirements.txt
       但希望换成课程号为`00874008`,教师号为`1001`的课程
 
 - 待选课程必须在选课系统中存在，不重复，否则程序将报错
+
 - 在第 2 种模式下，当待选课程可被选择时，程序将自动退选待替换的课程，再选择目标课程，同时尝试选回待替换的课程以防在退课间隙目标课程选满
+
 - 然而此时仍可能有很小几率这两门课程同时选课失败从而掉课，请自行衡量风险后选择使用
+
 - 课程信息项由`course`+数字构成，如有需要可以在默认配置文件之上继续添加`course10=`，`course11=`...等项
 
 #### **其它说明**
@@ -75,21 +104,17 @@ python -m pip install -r requirements.txt
 - 程序会忽略格式不正确的配置
 - 在进行新学期选课时，可能需要更改`term`的值，或将其清空
 - 当程序在运行时，请尽量不要在其它处登录选课系统
-- [New]程序现可处理用户在其它处登录的情况
+- 程序现可处理用户在其它处登录的情况
+- `loglevel`必须是1到5之间的整数
+- 程序运行日志默认会被保存在`selection.log`中，可以使用文本编辑器打开查看
 
 ### **运行程序**
+
+在命令行中执行下列命令
 
 ```bash
 python SCourseHelper.py
 ```
-
-你可以通过将配置文件中的 `autoclearscreen`项设为 `0` 并执行以下命令来保存程序运行日志
-
-```bash
-python SCourseHelper.py >> log.txt
-```
-
-不过这种方法会使程序后台运行且不输出到终端上
 
 在输入相关信息或者编辑配置后，程序将自动运行尝试选课/蹲课
 
