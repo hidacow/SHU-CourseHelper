@@ -14,6 +14,16 @@ If the targeted course is conflicting with currently selected courses, you can l
 
 ## **Version History**
 
+**Ver 1.3.1 (2022.2.19)**
+
+This update involves new dependency: [tenacity](https://github.com/jd/tenacity), please install it before running the script
+
+- Requests will now retry if failed
+
+- Minor improvements
+
+  > Notice: Due to changes in course selection system rules, protection feature in Advanced mode no longer works
+
 **Ver 1.3 (2022.1.8)**
 
 - Various fixes in program logic
@@ -74,7 +84,7 @@ Log levels is explained in the table below.
 
 The default log level is `INFO`, which is also the recommended level if you enable logging
 
-#### **Editting Course config**
+#### **Editing Course config**
 
 - The program support two modes of parsing the config
 
@@ -84,7 +94,7 @@ The default log level is `INFO`, which is also the recommended level if you enab
 
       The program will select course no.`00874008`, teacher no.`1001`
 
-  2. Advanced mode：`Course id,Teacher id or Course id,Teacher id,Replace Course id,Replace Teacher id`
+  2. Advanced mode：`Course id,Teacher id,Replace Course id,Replace Teacher id`
 
       Example: `00874008,1001,00874008,1002`
 
@@ -168,6 +178,10 @@ Once you entered/configured all the relevant information, the program will autom
 
    Please make sure that all the information you input is correct, or the program will return an error
 
-### **Contribute**
+## **Contribute**
 
 You can star this project, create issues, discussion threads or [buy me a cup of coffee](https://ishs.gq/jz.html)
+
+## License
+
+Licensed under the [GPL-3.0 License](LICENSE).

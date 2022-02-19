@@ -5,12 +5,14 @@ import time
 from collections import namedtuple
 import lxml.etree
 import logging
-from os import system, name
+import os
 import requests
 import rsa
+from tenacity import retry, stop_after_attempt, wait_fixed
+import urllib.parse
 
 # Settings
-VER="1.3"
+VER = "1.3.1"
 query_delay = 1.5
 chk_select_time_delay = 5
 auto_cls = True
@@ -33,7 +35,8 @@ sterm = 0
 
 # Declaration
 Termitem = namedtuple("Term", ["termid", "name"])
-Courseinfo = namedtuple("CourseInfo", ["courseid", "coursename", "teacherid", "teachername", "capacity", "number", "restriction"])
+Courseinfo = namedtuple("CourseInfo",
+                        ["courseid", "coursename", "teacherid", "teachername", "capacity", "number", "restriction"])
 Courseitem = namedtuple("CourseItem", ["courseid", "teacherid", "replacecid", "replacetid"])
 Selectionresult = namedtuple("SelectionResult",
                              ["courseid", "coursename", "teacherid", "teachername", "msg", "isSuccess"])
@@ -94,7 +97,7 @@ def readconfig():  # read config from file
         return
     courses = config["Courses"]
     global username, password, encryptedpassword, sterm
-    global query_delay, chk_select_time_delay, warn_diff_campus, auto_cls, inputlist, keep_logs,logging_level
+    global query_delay, chk_select_time_delay, warn_diff_campus, auto_cls, inputlist, keep_logs, logging_level
     # use global in order to modify global values
     username = userinfo.get("user", "")
     password = userinfo.get("password", "")
@@ -126,8 +129,8 @@ def readconfig():  # read config from file
         print("Warning: config of keeplogs is invalid, set to default..")
         keep_logs = True
     try:
-        logging_level = 10*int(settings.get("loglevel", "2"))
-        if not (10<=logging_level<=50):
+        logging_level = 10 * int(settings.get("loglevel", "2"))
+        if not (10 <= logging_level <= 50):
             raise ValueError
     except:
         print("Warning: config of loglevel is invalid, set to default..")
@@ -176,11 +179,11 @@ def writeterm():  # write current termid to config
 
 def clear():  # cross-platform clear screen function
     # for windows
-    if name == 'nt':
-        _ = system('cls')
+    if os.name == 'nt':
+        _ = os.system('cls')
     # for mac and linux
     else:
-        _ = system('clear')
+        _ = os.system('clear')
 
 
 def encryptPass(passwd):
@@ -205,7 +208,7 @@ def deletecoursefromlist(cid, tid):  # delete an item from list
     index = findcourseinlist(cid, tid, inputlist)
     if index != -1:
         del inputlist[index]
-        logging.info("Delete course %s,%s from list" % (cid,tid))
+        logging.info("Delete course %s,%s from list" % (cid, tid))
     else:
         logging.critical("Unable to find course to delete")
         raise ValueError("Unexpected Result")
@@ -225,7 +228,8 @@ def findreplaceinlist(cid, tid):  # find the item in the inputlist given replace
     return -1
 
 
-def getCourseInfo(cid, tid, sess):  # query course info by cid and tid
+@retry(stop=stop_after_attempt(10), wait=wait_fixed(0.25))
+def getCourseInfo(cid, tid, sess: requests.session):  # query course info by cid and tid
     params = {
         "PageIndex": 1,
         "PageSize": 1,
@@ -249,13 +253,28 @@ def getCourseInfo(cid, tid, sess):  # query course info by cid and tid
         raise RuntimeError(3, f"Course Not Exist")
     html = lxml.etree.HTML(r.text)
     td = html.xpath("//table[@class='tbllist']/tr/td")
-    return Courseinfo(courseid=td[0].text.strip(),
-                      coursename=td[1].text.strip(),
-                      teacherid=td[3].text.strip(),
-                      teachername=td[4].xpath("./span/text()")[0],
-                      capacity=int(td[8].text.strip()),
-                      number=int(td[9].text.strip()),
-                      restriction=td[11].text.strip() if td[11].text else "")
+    try:
+        return Courseinfo(courseid=td[0].text.strip(),
+                          coursename=td[1].text.strip(),
+                          teacherid=td[3].text.strip(),
+                          teachername=td[4].xpath("./span/text()")[0],
+                          capacity=int(td[8].text.strip()),
+                          number=int(td[9].text.strip()),
+                          restriction=td[11].text.strip() if td[11].text else "")
+    except:
+        emsg = r.status_code
+        if r.url.startswith(_baseurl+_baseerror):
+            emsg = urllib.parse.unquote(r.url.replace(_baseurl+_baseerror+"?msg=",""))
+        logging.warning('Error Occurred: %s' % emsg)
+        logging.debug(r.text)
+        time.sleep(0.5)
+        return Courseinfo(courseid=cid,
+                          coursename="XXX",
+                          teacherid=tid,
+                          teachername="XXX",
+                          capacity=0,
+                          number=0,
+                          restriction="Error Occurred: %s Retry..." % emsg)
 
 
 def canSelect(cinfo):  # judge whether a course can be selected
@@ -269,6 +288,7 @@ def canSelect(cinfo):  # judge whether a course can be selected
     return True
 
 
+@retry(stop=stop_after_attempt(10), wait=wait_fixed(0.25))
 def checkDiffCampus(param, sess):
     r = sess.post(_baseurl + _diffcampus, param)
     if "未将对象引用设置到对象的实例" in r.text:
@@ -286,6 +306,7 @@ def checkDiffCampus(param, sess):
     return
 
 
+@retry(stop=stop_after_attempt(10), wait=wait_fixed(0.25))
 def returnCourse(courses, sess):  # return a list of courses
     datastr = ""
     for course in courses:
@@ -294,15 +315,16 @@ def returnCourse(courses, sess):  # return a list of courses
         datastr += ("&tnos=" + course.replacetid)
     headers = {'Content-type': 'application/x-www-form-urlencoded; charset=UTF-8'}
     r = sess.post(_baseurl + _dropcourse, data=datastr[1:], headers=headers)
-    while(_termindex in r.url):
+    while _termindex in r.url:
         print("\nYou have logged in elsewhere:(  Need to select term first...")
         logging.warning("Return Course Failed. Retry selecting term")
-        sess=selectTerm(sterm,sess,False)
+        sess = selectTerm(sterm, sess, False)
         r = sess.post(_baseurl + _dropcourse, data=datastr[1:], headers=headers)
     return ("退课成功" in r.text) and ("无此教学班数据" not in r.text) and ("未选此教学班" not in r.text)
     # TODO: verify the result of each course
 
 
+@retry(stop=stop_after_attempt(10), wait=wait_fixed(0.25))
 def selectCourse(courses, sess):  # select a list of courses
     params = {}
     i = 0
@@ -318,16 +340,16 @@ def selectCourse(courses, sess):  # select a list of courses
     if warn_diff_campus:
         checkDiffCampus(params, sess)
     r = sess.post(_baseurl + _selectcourse, params)
-    while("未指定当前选课学期！" in r.text):
+    while "未指定当前选课学期！" in r.text:
         print("You have logged in elsewhere:(  Need to select term first...")
         logging.warning("Select Course Failed. Retry selecting term")
-        sess=selectTerm(sterm,sess,False)
+        sess = selectTerm(sterm, sess, False)
         r = sess.post(_baseurl + _selectcourse, params)
     html = lxml.etree.HTML(r.text)
     table_rows = html.xpath("//table/tr/td/..")
     if len(table_rows) <= 1:
         # Something wrong, select term first
-        sess=selectTerm(sterm,sess,False)
+        sess = selectTerm(sterm, sess, False)
         if not isSelectTime(sess):
             print("Selection Time has ended:(\n\nQuitting...")
             logging.critical("Selection period appears to be ended")
@@ -335,7 +357,7 @@ def selectCourse(courses, sess):  # select a list of courses
         r = sess.post(_baseurl + _selectcourse, params)
         html = lxml.etree.HTML(r.text)
         table_rows = html.xpath("//table/tr/td/..")
-        if len(table_rows) <= 1: # retry one time
+        if len(table_rows) <= 1:  # retry one time
             print("Something Wrong :(")
             logging.critical("Cannot analyze return results")
             logging.debug("EXTRA INFO: r.url = " + r.url)
@@ -360,10 +382,11 @@ def selectCourse(courses, sess):  # select a list of courses
             logging.debug("EXTRA INFO: r.url = " + r.url)
             logging.debug("EXTRA INFO: r.text = " + r.text)
             raise RuntimeError("Cannot analyze return results")
-            
+
     return result
 
 
+@retry(stop=stop_after_attempt(10), wait=wait_fixed(0.25))
 def isSelectTime(sess):  # judge whether it is selection time
     r = sess.get(_baseurl + _fastinput)
     if "非本校区提示" in r.text:
@@ -373,7 +396,8 @@ def isSelectTime(sess):  # judge whether it is selection time
         return False
 
 
-def selectTerm(term, sess,dtips=True):  # select the term
+@retry(stop=stop_after_attempt(10), wait=wait_fixed(0.25))
+def selectTerm(term, sess, dtips=True):  # select the term
     global sterm
     sterm = term
     r = sess.post(_baseurl + _termselect, {"termId": term})
@@ -396,7 +420,8 @@ def selectTerm(term, sess,dtips=True):  # select the term
     logging.info("Selected Term: %s" % term)
     if dtips:
         writeterm()
-        print("Term info has been saved, to change it or select again, please delete the value in config file", end="\n\n")
+        print("Term info has been saved, to change it or select again, please delete the value in config file",
+              end="\n\n")
     return sess
 
 
@@ -404,12 +429,12 @@ def login(username, encryptpwd):
     global sterm
     print("Logging in...")
     session = requests.Session()
-    
     try:
         r = session.get(_baseurl)
-    except:
+    except Exception as emsg:
+        print(str(emsg))
         print("\nUnable to connect:(\nPlease use VPN or check network settings")
-        logging.error("ERROR in logging in: Unable to connect")
+        logging.error("ERROR in logging in: %s" % emsg)
         exit(1)
     if not r.url.startswith(
             ("https://oauth.shu.edu.cn/", "https://newsso.shu.edu.cn/")):
@@ -461,16 +486,16 @@ def login(username, encryptpwd):
             return selectTerm(Termlist[0].termid, session)
 
 
-print("SCourseHelper V"+VER)
+print("SCourseHelper V" + VER)
 print()
 print("FREE, Open Source on https://github.com/hidacow/SHU-CourseHelper")
 print()
 print()
-print("Reading Config...",end="")
+print("Reading Config...", end="")
 readconfig()
 print()
-if keep_logs==True:
-    logging.basicConfig(filename=LOGPATH,format=LOG_FORMAT,datefmt=DATE_FORMAT,level=logging_level)
+if keep_logs == True:
+    logging.basicConfig(filename=LOGPATH, format=LOG_FORMAT, datefmt=DATE_FORMAT, level=logging_level)
     print("Logging is ENABLED. Program logs can be found at %s\n" % LOGPATH)
 else:
     logging.disable(100)
@@ -548,7 +573,7 @@ if len(inputlist) == 0:
                 inputlist.append(Courseitem(a, b, d, e))
                 break
             else:
-                if c == "N" or c == "n" or c=="":
+                if c == "N" or c == "n" or c == "":
                     inputlist.append(Courseitem(a, b, "null", "null"))
                     break
                 else:
@@ -573,7 +598,9 @@ while True:
     print("-------------------------")
     for item in inputlist:
         course = getCourseInfo(item.courseid, item.teacherid, s)
-        print("%s(%s) by %s(%s) : %d/%d %s" % (course.coursename, course.courseid, course.teachername, course.teacherid, course.number, course.capacity, course.restriction), end="")
+        print("%s(%s) by %s(%s) : %d/%d %s" % (
+            course.coursename, course.courseid, course.teachername, course.teacherid, course.number, course.capacity,
+            course.restriction), end="")
         if canSelect(course):
             print("... can be selected!!")
             SubmitList.append(item)
@@ -610,33 +637,58 @@ while True:
                 # if selection is success and backupselection is not success: replacement successful, delete from task
                 # if selection failed but backup selection is success: replacement not successful, continue loop
                 # if selection and backup both failed: continue loop
-                print("%s(%s) by %s(%s) : %s" % (selection.coursename, selection.courseid, selection.teachername, selection.teacherid, selection.msg))
-                logging.info("Target  Course %s(%s) by %s(%s) : %s" % (selection.coursename, selection.courseid, selection.teachername, selection.teacherid, selection.msg))
+                print("%s(%s) by %s(%s) : %s" % (
+                    selection.coursename, selection.courseid, selection.teachername, selection.teacherid,
+                    selection.msg))
+                logging.info("Target  Course %s(%s) by %s(%s) : %s" % (
+                    selection.coursename, selection.courseid, selection.teachername, selection.teacherid,
+                    selection.msg))
                 if selection.isSuccess:
                     if not result[rid2].isSuccess:  # Best situation
-                        print("Previously selected course %s(%s) by %s(%s) had been automatically returned" % (result[rid2].coursename, result[rid2].courseid, result[rid2].teachername, result[rid2].teacherid))
-                        logging.info("Previously selected course %s(%s) by %s(%s) had been automatically returned" % (result[rid2].coursename, result[rid2].courseid, result[rid2].teachername, result[rid2].teacherid))
+                        print("Previously selected course %s(%s) by %s(%s) had been automatically returned" % (
+                            result[rid2].coursename, result[rid2].courseid, result[rid2].teachername,
+                            result[rid2].teacherid))
+                        logging.info("Previously selected course %s(%s) by %s(%s) had been automatically returned" % (
+                            result[rid2].coursename, result[rid2].courseid, result[rid2].teachername,
+                            result[rid2].teacherid))
                     else:  # Exceptional situation: User entered two courses that are not conflicting, TODO(maybe):return the unwanted course
-                        print("%s(%s) by %s(%s) : %s" % (result[rid2].coursename, result[rid2].courseid, result[rid2].teachername, result[rid2].teacherid, result[rid2].msg))
-                        print("The two courses are not conflicting, both are selected, you might want to manually return one of them")
-                        logging.info("Backup Course %s(%s) by %s(%s) : %s" % (result[rid2].coursename, result[rid2].courseid, result[rid2].teachername, result[rid2].teacherid, result[rid2].msg))
+                        print("%s(%s) by %s(%s) : %s" % (
+                            result[rid2].coursename, result[rid2].courseid, result[rid2].teachername,
+                            result[rid2].teacherid, result[rid2].msg))
+                        print(
+                            "The two courses are not conflicting, both are selected, you might want to manually return one of them")
+                        logging.info("Backup Course %s(%s) by %s(%s) : %s" % (
+                            result[rid2].coursename, result[rid2].courseid, result[rid2].teachername,
+                            result[rid2].teacherid, result[rid2].msg))
                     deletecoursefromlist(selection.courseid, selection.teacherid)  # remove from task due to success
                 else:  # not selection.isSuccess
-                    print("%s(%s) by %s(%s) : %s" % (result[rid2].coursename, result[rid2].courseid, result[rid2].teachername, result[rid2].teacherid, result[rid2].msg))
-                    logging.info("Backup Course %s(%s) by %s(%s) : %s" % (result[rid2].coursename, result[rid2].courseid, result[rid2].teachername, result[rid2].teacherid, result[rid2].msg))
+                    print("%s(%s) by %s(%s) : %s" % (
+                        result[rid2].coursename, result[rid2].courseid, result[rid2].teachername,
+                        result[rid2].teacherid,
+                        result[rid2].msg))
+                    logging.info("Backup Course %s(%s) by %s(%s) : %s" % (
+                        result[rid2].coursename, result[rid2].courseid, result[rid2].teachername,
+                        result[rid2].teacherid,
+                        result[rid2].msg))
                     if result[rid2].isSuccess:
                         print("Course replacement failed, the course you previously selected had been selected back")
                         # if target course selection failed with certain reason, discontinue
-                        if selection.isSuccess or ("已选此课程" in selection.msg) or ("课时冲突" in selection.msg) or ("已选同组课程" in selection.msg):
+                        if selection.isSuccess or ("已选此课程" in selection.msg) or ("课时冲突" in selection.msg) or (
+                                "已选同组课程" in selection.msg):
                             deletecoursefromlist(selection.courseid, selection.teacherid)
                             if "已选此课程" in selection.msg:
                                 print("Please return the course %s manually, and add it again" % selection.coursename)
-                                logging.warning("Please return the course %s manually, and add it again" % selection.coursename)
+                                logging.warning(
+                                    "Please return the course %s manually, and add it again" % selection.coursename)
                             if ("课时冲突" in selection.msg) or ("已选同组课程" in selection.msg):
-                                print("Please change courses conflicting with %s manually, and add it again" % selection.coursename)
-                                logging.warning("Please change courses conflicting with %s manually, and add it again" % selection.coursename)
-                            print("Due to unresolved conflicts in selecting the target course, the program will stop selecting this course")
-                            logging.warning("Due to unresolved conflicts in selecting the target course, the program will stop selecting this course")
+                                print(
+                                    "Please change courses conflicting with %s manually, and add it again" % selection.coursename)
+                                logging.warning(
+                                    "Please change courses conflicting with %s manually, and add it again" % selection.coursename)
+                            print(
+                                "Due to unresolved conflicts in selecting the target course, the program will stop selecting this course")
+                            logging.warning(
+                                "Due to unresolved conflicts in selecting the target course, the program will stop selecting this course")
                         else:
                             print("The program will continue trying to replace the course")
                     else:  # Exceptional or Unfortunate situation: Both courses are dropped
@@ -646,25 +698,32 @@ while True:
                             deletecoursefromlist(selection.courseid, selection.teacherid)
                             # remove original item first
                             inputlist.append(Courseitem(item.courseid, item.teacherid, "null", "null"))
-                            logging.info("Add %s,%s to list"%(item.courseid, item.teacherid))
+                            logging.info("Add %s,%s to list" % (item.courseid, item.teacherid))
                             # add an item without replacement
                         else:
                             if ("已选此课程" in selection.msg) or ("课时冲突" in selection.msg) or ("已选同组课程" in selection.msg):
                                 if dropsuccess == 1:  # drop success
-                                    print("Seems impossible to replace course, please check selection strategy and retry")
-                                    logging.warning("Seems impossible to replace course, please check selection strategy and retry")
+                                    print(
+                                        "Seems impossible to replace course, please check selection strategy and retry")
+                                    logging.warning(
+                                        "Seems impossible to replace course, please check selection strategy and retry")
                                     deletecoursefromlist(selection.courseid, selection.teacherid)  # discontinue
-                                if dropsuccess == -1 and ("已选此课程" in result[rid2].msg) or ("课时冲突" in result[rid2].msg) or ("已选同组课程" in result[rid2].msg):
+                                if dropsuccess == -1 and ("已选此课程" in result[rid2].msg) or (
+                                        "课时冲突" in result[rid2].msg) or ("已选同组课程" in result[rid2].msg):
                                     print("Seems unable to select the original course back, did you select it?")
-                                    logging.warning("Seems unable to select the original course back, did you select it?")
+                                    logging.warning(
+                                        "Seems unable to select the original course back, did you select it?")
                                     deletecoursefromlist(selection.courseid, selection.teacherid)  # discontinue
                                 else:
                                     if dropsuccess == -1:
-                                        print("It seems that the error relates to failure in returning courses, the program will retry")
+                                        print(
+                                            "It seems that the error relates to failure in returning courses, the program will retry")
                             else:
-                                print("Unfortunately, failed to select both courses, trying to select either of the courses")
+                                print(
+                                    "Unfortunately, failed to select both courses, trying to select either of the courses")
                                 deletecoursefromlist(selection.courseid, selection.teacherid)
-                                logging.warning("Cannot Select both course. Add %s,%s ; %s,%s to list" % (item.courseid, item.teacherid, item.replacecid, item.replacetid))
+                                logging.warning("Cannot Select both course. Add %s,%s ; %s,%s to list" % (
+                                    item.courseid, item.teacherid, item.replacecid, item.replacetid))
                                 # remove original item first
                                 inputlist.append(Courseitem(item.courseid, item.teacherid, "null", "null"))
                                 # add an item without replacement
@@ -672,20 +731,29 @@ while True:
                                 # add the original course to tasks
             else:
                 if item.replacecid != "backup":
-                    print("%s(%s) by %s(%s) : %s" % (selection.coursename, selection.courseid, selection.teachername, selection.teacherid, selection.msg))
-                    logging.info("Target  Course %s(%s) by %s(%s) : %s" % (selection.coursename, selection.courseid, selection.teachername, selection.teacherid, selection.msg))
-                    if selection.isSuccess or ("已选此课程" in selection.msg) or ("课时冲突" in selection.msg) or ("已选同组课程" in selection.msg):
+                    print("%s(%s) by %s(%s) : %s" % (
+                        selection.coursename, selection.courseid, selection.teachername, selection.teacherid,
+                        selection.msg))
+                    logging.info("Target  Course %s(%s) by %s(%s) : %s" % (
+                        selection.coursename, selection.courseid, selection.teachername, selection.teacherid,
+                        selection.msg))
+                    if selection.isSuccess or ("已选此课程" in selection.msg) or ("课时冲突" in selection.msg) or (
+                            "已选同组课程" in selection.msg):
                         deletecoursefromlist(selection.courseid, selection.teacherid)
                         # success or need user actions, discontinue
                         if "已选此课程" in selection.msg:
                             print("Please return the course %s manually, and add it again" % selection.coursename)
-                            logging.warning("Please return the course %s manually, and add it again" % selection.coursename)
+                            logging.warning(
+                                "Please return the course %s manually, and add it again" % selection.coursename)
                         if ("课时冲突" in selection.msg) or ("已选同组课程" in selection.msg):
-                            print("Please change courses conflicting with %s manually, and add it again" % selection.coursename)
-                            logging.warning("Please change courses conflicting with %s manually, and add it again" % selection.coursename)
-                        print("You may also edit the config to let the program automatically return conflicting courses")
+                            print(
+                                "Please change courses conflicting with %s manually, and add it again" % selection.coursename)
+                            logging.warning(
+                                "Please change courses conflicting with %s manually, and add it again" % selection.coursename)
+                        print(
+                            "You may also edit the config to let the program automatically return conflicting courses")
                 # else is backup, ok to skip
-            del result[rid] # We don't need this result item anymore
+            del result[rid]  # We don't need this result item anymore
             print()
 
         # Judge task progress
