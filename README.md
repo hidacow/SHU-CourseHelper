@@ -14,6 +14,12 @@ If the targeted course is conflicting with currently selected courses, you can l
 
 ## **Version History**
 
+**Ver 1.3.2 (2023.2.13)**
+
+- Support comments in config file. You can use `#`  to comment, comments starting with `;` will disappear after running the program
+- Fix: Chinese comments in config file cannot be parsed
+- Judge new situation: `Already selected the course and passed in previous terms`
+
 **Ver 1.3.1 (2022.2.19)**
 
 This update involves new dependency: [tenacity](https://github.com/jd/tenacity), please install it before running the script
@@ -72,7 +78,7 @@ All the config items are explained in the table below
 | [Courses]  | course2          | Same as above                                                |
 |            | ...              |                                                              |
 
-Log levels is explained in the table below.
+Log levels are explained in the table below.
 
 | Level      | Value |
 | ---------- | ----- |

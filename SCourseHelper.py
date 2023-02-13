@@ -12,7 +12,7 @@ from tenacity import retry, stop_after_attempt, wait_fixed
 import urllib.parse
 
 # Settings
-VER = "1.3.1"
+VER = "1.3.2"
 query_delay = 1.5
 chk_select_time_delay = 5
 auto_cls = True
@@ -78,7 +78,7 @@ def initconfig():  # write a default config
         config["Courses"]["course%d" % i] = ""
 
     try:
-        with open(CONFIGPATH, 'w') as configfile:
+        with open(CONFIGPATH, 'w', encoding="utf-8") as configfile:
             config.write(configfile, space_around_delimiters=False)
         print("Default config file is saved")
     except:
@@ -88,7 +88,7 @@ def initconfig():  # write a default config
 def readconfig():  # read config from file
     config = configparser.ConfigParser(allow_no_value=True)
     try:
-        config.read(CONFIGPATH)
+        config.read(CONFIGPATH, encoding="utf-8")
         userinfo = config["Userinfo"]
         settings = config["Settings"]
     except KeyError:
@@ -104,35 +104,35 @@ def readconfig():  # read config from file
     encryptedpassword = userinfo.get("encryptpassword", "")
     sterm = settings.get("term", "")
     try:
-        query_delay = float(settings.get("querydelay", "1.5"))
-    except:
+        query_delay = settings.getfloat("querydelay", "1.5")
+    except ValueError:
         print("Warning: config of querydelay is invalid, set to default..")
         query_delay = 1.5
     try:
-        chk_select_time_delay = float(settings.get("checkselectdelay", "5"))
-    except:
+        chk_select_time_delay = settings.getfloat("checkselectdelay", "5")
+    except ValueError:
         print("Warning: config of checkselectdelay is invalid, set to default..")
         chk_select_time_delay = 5
     try:
-        warn_diff_campus = bool(int(settings.get("warndiffcampus", "1")))
-    except:
+        warn_diff_campus = bool(settings.getint("warndiffcampus", "1"))
+    except ValueError:
         print("Warning: config of warndiffcampus is invalid, set to default..")
         warn_diff_campus = True
     try:
-        auto_cls = bool(int(settings.get("autoclearscreen", "1")))
-    except:
+        auto_cls = bool(settings.getint("autoclearscreen", "1"))
+    except ValueError:
         print("Warning: config of autoclearscreen is invalid, set to default..")
         auto_cls = True
     try:
-        keep_logs = bool(int(settings.get("keeplogs", "1")))
-    except:
+        keep_logs = bool(settings.getint("keeplogs", "1"))
+    except ValueError:
         print("Warning: config of keeplogs is invalid, set to default..")
         keep_logs = True
     try:
-        logging_level = 10 * int(settings.get("loglevel", "2"))
+        logging_level = 10 * settings.getint("loglevel", "2")
         if not (10 <= logging_level <= 50):
             raise ValueError
-    except:
+    except ValueError:
         print("Warning: config of loglevel is invalid, set to default..")
         logging_level = 20
     i = 0
@@ -154,24 +154,24 @@ def readconfig():  # read config from file
 
 
 def writeepwd():  # write encrypted password to config
-    config = configparser.ConfigParser(allow_no_value=True)
-    config.read(CONFIGPATH)
+    config = configparser.ConfigParser(allow_no_value=True,comment_prefixes=(';'))
+    config.read(CONFIGPATH,encoding="utf-8")
     config["Userinfo"]["user"] = username
     config["Userinfo"]["encryptpassword"] = encryptedpassword
     config["Userinfo"]["password"] = ""
     try:
-        with open(CONFIGPATH, 'w') as configfile:
+        with open(CONFIGPATH, 'w', encoding="utf-8") as configfile:
             config.write(configfile, space_around_delimiters=False)
     except:
         print("Error: Unable to write config")
 
 
 def writeterm():  # write current termid to config
-    config = configparser.ConfigParser(allow_no_value=True)
-    config.read(CONFIGPATH)
+    config = configparser.ConfigParser(allow_no_value=True,comment_prefixes=(';'))
+    config.read(CONFIGPATH, encoding="utf-8")
     config["Settings"]["term"] = str(sterm)
     try:
-        with open(CONFIGPATH, 'w') as configfile:
+        with open(CONFIGPATH, 'w', encoding="utf-8") as configfile:
             config.write(configfile, space_around_delimiters=False)
     except:
         print("Error: Unable to write config")
@@ -674,13 +674,13 @@ while True:
                         print("Course replacement failed, the course you previously selected had been selected back")
                         # if target course selection failed with certain reason, discontinue
                         if selection.isSuccess or ("已选此课程" in selection.msg) or ("课时冲突" in selection.msg) or (
-                                "已选同组课程" in selection.msg):
+                                "已选同组课程" in selection.msg) or ("已选过且成绩合格" in selection.msg):
                             deletecoursefromlist(selection.courseid, selection.teacherid)
                             if "已选此课程" in selection.msg:
                                 print("Please return the course %s manually, and add it again" % selection.coursename)
                                 logging.warning(
                                     "Please return the course %s manually, and add it again" % selection.coursename)
-                            if ("课时冲突" in selection.msg) or ("已选同组课程" in selection.msg):
+                            if ("课时冲突" in selection.msg) or ("已选同组课程" in selection.msg) or ("已选过且成绩合格" in selection.msg):
                                 print(
                                     "Please change courses conflicting with %s manually, and add it again" % selection.coursename)
                                 logging.warning(
@@ -701,7 +701,7 @@ while True:
                             logging.info("Add %s,%s to list" % (item.courseid, item.teacherid))
                             # add an item without replacement
                         else:
-                            if ("已选此课程" in selection.msg) or ("课时冲突" in selection.msg) or ("已选同组课程" in selection.msg):
+                            if ("已选此课程" in selection.msg) or ("课时冲突" in selection.msg) or ("已选同组课程" in selection.msg) or ("已选过且成绩合格" in selection.msg):
                                 if dropsuccess == 1:  # drop success
                                     print(
                                         "Seems impossible to replace course, please check selection strategy and retry")
@@ -709,7 +709,7 @@ while True:
                                         "Seems impossible to replace course, please check selection strategy and retry")
                                     deletecoursefromlist(selection.courseid, selection.teacherid)  # discontinue
                                 if dropsuccess == -1 and ("已选此课程" in result[rid2].msg) or (
-                                        "课时冲突" in result[rid2].msg) or ("已选同组课程" in result[rid2].msg):
+                                        "课时冲突" in result[rid2].msg) or ("已选同组课程" in result[rid2].msg) or ("已选过且成绩合格" in result[rid2].msg):
                                     print("Seems unable to select the original course back, did you select it?")
                                     logging.warning(
                                         "Seems unable to select the original course back, did you select it?")
@@ -738,14 +738,14 @@ while True:
                         selection.coursename, selection.courseid, selection.teachername, selection.teacherid,
                         selection.msg))
                     if selection.isSuccess or ("已选此课程" in selection.msg) or ("课时冲突" in selection.msg) or (
-                            "已选同组课程" in selection.msg):
+                            "已选同组课程" in selection.msg) or ("已选过且成绩合格" in selection.msg):
                         deletecoursefromlist(selection.courseid, selection.teacherid)
                         # success or need user actions, discontinue
                         if "已选此课程" in selection.msg:
                             print("Please return the course %s manually, and add it again" % selection.coursename)
                             logging.warning(
                                 "Please return the course %s manually, and add it again" % selection.coursename)
-                        if ("课时冲突" in selection.msg) or ("已选同组课程" in selection.msg):
+                        if ("课时冲突" in selection.msg) or ("已选同组课程" in selection.msg) or ("已选过且成绩合格" in selection.msg):
                             print(
                                 "Please change courses conflicting with %s manually, and add it again" % selection.coursename)
                             logging.warning(
