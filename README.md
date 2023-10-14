@@ -14,6 +14,11 @@ If the targeted course is conflicting with currently selected courses, you can l
 
 ## **Version History**
 
+**Ver 1.3.3 (2023.10.14)**
+
+- Minor refactor in code
+- Fixed false Different Campus warning
+
 **Ver 1.3.2 (2023.2.13)**
 
 - Support comments in config file. You can use `#`  to comment, comments starting with `;` will disappear after running the program
