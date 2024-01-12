@@ -1,5 +1,7 @@
+
 import base64
 import configparser
+import datetime
 import getpass
 import time
 from collections import namedtuple
@@ -11,8 +13,88 @@ import rsa
 from tenacity import retry, stop_after_attempt, wait_fixed
 import urllib.parse
 
-# If you run in Jetbrains IDE,
-# Go to 'Edit Configurations' and then select 'Emulate terminal in output console'.
+import smtplib
+
+# 创建 SMTP 对象
+smtp = smtplib.SMTP()
+# 连接（connect）指定服务器
+smtp.connect("smtp.163.com", port=25)
+# 登录，需要：登录邮箱和授权码
+#todo:替换邮箱用户名和授权码
+smtp.login(user="", password="")
+from email.mime.text import MIMEText
+from email.header import Header
+
+
+def connectsmtp():
+    global smtp
+    smtp = smtplib.SMTP()
+    #todo:可能要改，根据不同的邮箱更改为不同的服务器
+    smtp.connect("smtp.163.com", port=25)
+    #todo:替换邮箱用户名和授权码
+    smtp.login(user="", password="")
+
+
+def printf(mess, end="\n"):
+    print(mess, end)
+    send(mess)
+
+
+def send(messagetext):
+    print(messagetext)
+    message = MIMEText(messagetext, 'plain', 'utf-8')
+    message['Subject'] = Header(messagetext, 'utf-8')  # 定义主题内容
+    c = 1
+    while c == 1:
+        try:
+            #todo:替换发件人和收件人
+            smtp.sendmail(from_addr="", to_addrs="", msg=message.as_string())
+            c = 2
+        except:
+            print("发送失败")
+            reconnect()
+            connectsmtp()
+
+
+def reconnect():
+    #todo:因为本人是在ubuntu的环境下使用，因此网络重新连接部分不能被使用到windows或者mac下可能需要进行适配并对这个功能进行开关调整
+    print("重新连接中")
+    import subprocess
+    # scan_result = subprocess.run(['nmcli', 'con', 'show'], capture_output=True, text=True)
+    while 1:
+        print("尝试重新连接中中中\n",flush=True)
+        try:
+            yn = False
+            #todo: 更改为一个不是校园网的wifi,在''中填入
+            scan_result = subprocess.run(['nmcli', 'device', 'wifi', 'connect', ''], timeout=5,
+                                         capture_output=True, text=True)
+            print(scan_result.stdout, flush=True)
+            if "成功" not in scan_result.stdout:
+                print("第一个烂了", flush=True)
+                yn = True
+            #todo:使用的是(https://github.com/SHUzhekiNg/SHU-VPNconfig-for-Ubuntu)   (@Licheng Zheng)提供的ubuntu下openvpn的使用方式
+            scan_result = subprocess.run(['nmcli', 'con', 'up', 'id', 'SHU-VPN-Ubuntu'], timeout=5, capture_output=True,
+                                         text=True)
+            print(scan_result.stdout, flush=True)
+            if "成功" not in scan_result.stdout:
+                print("第2个烂了", flush=True)
+                yn = True
+            if yn == True:
+                #todo:使用的是SHuWlan-1X，可以通过下一行注释掉的指令在ubuntu下获取所有wifi的名称，记得需要print(scan_result.stdout),使用其中的ssid替换最后一个单引号即可
+                # scan_result =subprocess.run(['nmcli','device','wifi','list'],capture_output=True,text=True)
+                scan_result = subprocess.run(['nmcli', 'device', 'wifi', 'connect', 'ShuWlan-1X'], timeout=5,
+                                             capture_output=True, text=True)
+                print(scan_result.stdout, flush=True)
+                yn = False
+                if "成功" not in scan_result.stdout:
+                    print("第3个烂了", flush=True)
+                    yn = True
+            if yn == False:
+                break
+        except:
+            pass
+    printf("连接成功了")
+
 
 # Settings
 VER = "1.3.3"
@@ -76,7 +158,7 @@ def str_coursebaseinfo(info):
     return "%s(%s) by %s(%s)" % (info.coursename, info.courseid, info.teachername, info.teacherid)
 
 def printnwarn(msg):
-    print(msg)
+    printf(msg)
     logging.warning(msg)
 
 def initconfig():  # write a default config
@@ -268,11 +350,34 @@ def getCourseInfo(cid, tid, sess: requests.session):  # query course info by cid
         "Credit": "",
         "TimeText": ""
     }
-    r = sess.post(_baseurl + _querycourse, params)
+    count = 0
+    while count < 5:
+        try:
+            r = sess.post(_baseurl + _querycourse, params, timeout=5)
+            break
+        except requests.exceptions.Timeout:
+            reconnect()
+            if count == 4:
+                printf("网络重新连接失败了")
+        count += 1
+
     if "未查询到符合条件的数据！" in r.text:
         raise RuntimeError(3, f"Course Not Exist")
     html = lxml.etree.HTML(r.text)
-    td = html.xpath("//table[@class='tbllist']/tr/td")
+    a = 1
+    starttime = time.time()
+    while a == 1:
+        print("尝试获取网页")
+        try:
+            td = html.xpath("//table[@class='tbllist']/tr/td")
+            a = 2
+        except:
+            endtime = time.time()
+            print(endtime - starttime)
+            if (endtime - starttime >= 30):
+                printf("网络炸了")
+                time.sleep(20)
+            html = lxml.etree.HTML(r.text)
     try:
         return Courseinfo(courseid=td[0].text.strip(),
                           coursename=td[1].text.strip(),
@@ -312,16 +417,16 @@ def canSelect(cinfo):  # judge whether a course can be selected
 def checkDiffCampus(param, sess):
     r = sess.post(_baseurl + _diffcampus, param)
     if any(x in r.text for x in ["点击选择选课学期","未将对象引用设置到对象的实例"]):
-        print("Error: Did not select term!")
+        printf("Error: Did not select term!")
         logging.warning("System error when checkDiffCampus. Logged in elsewhere?")
         return
     else:
         if "ERROR" in r.text:
-            print("Something wrong. Please check your network")
+            printf("Something wrong. Please check your network")
             logging.warning("System error when checkDiffCampus. Network failure?")
     if "没有非本校区课程" not in r.text:
-        print("Warning: The location of some courses are in another campus")
-        print("Course Selection will proceed anyway")
+        printf("Warning: The location of some courses are in another campus")
+        printf("Course Selection will proceed anyway")
         logging.warning("checkDiffCampus: The location of some courses are in another campus")
     return
 
@@ -336,7 +441,7 @@ def returnCourse(courses, sess):  # return a list of courses
     headers = {'Content-type': 'application/x-www-form-urlencoded; charset=UTF-8'}
     r = sess.post(_baseurl + _dropcourse, data=datastr[1:], headers=headers)
     while _termindex in r.url:
-        print("\nYou have logged in elsewhere:(  Need to select term first...")
+        printf("\nYou have logged in elsewhere:(  Need to select term first...")
         logging.warning("Return Course Failed. Retry selecting term")
         sess = selectTerm(sterm, sess, False)
         r = sess.post(_baseurl + _dropcourse, data=datastr[1:], headers=headers)
@@ -361,7 +466,7 @@ def selectCourse(courses, sess):  # select a list of courses
         checkDiffCampus(params, sess)
     r = sess.post(_baseurl + _selectcourse, params)
     while "未指定当前选课学期！" in r.text:
-        print("You have logged in elsewhere:(  Need to select term first...")
+        printf("You have logged in elsewhere:(  Need to select term first...")
         logging.warning("Select Course Failed. Retry selecting term")
         sess = selectTerm(sterm, sess, False)
         r = sess.post(_baseurl + _selectcourse, params)
@@ -371,14 +476,14 @@ def selectCourse(courses, sess):  # select a list of courses
         # Something wrong, select term first
         sess = selectTerm(sterm, sess, False)
         if not isSelectTime(sess):
-            print("Selection Time has ended:(\n\nQuitting...")
+            printf("Selection Time has ended:(\n\nQuitting...")
             logging.critical("Selection period appears to be ended")
             raise RuntimeError("Selection period appears to be ended")
         r = sess.post(_baseurl + _selectcourse, params)
         html = lxml.etree.HTML(r.text)
         table_rows = html.xpath("//table/tr/td/..")
         if len(table_rows) <= 1:  # retry one time
-            print("Something Wrong :(")
+            printf("Something Wrong :(")
             logging.critical("Cannot analyze return results")
             logging.debug("EXTRA INFO: r.url = " + r.url)
             logging.debug("EXTRA INFO: r.text = " + r.text)
@@ -425,16 +530,16 @@ def selectTerm(term, sess, dtips=True):  # select the term
         print("-------------------------")
     else:
         if "切换选课学期" not in r.text:
-            print("Login Failed?")
+            printf("Login Failed?")
             logging.critical("Select Term Failed: Login Failed?")
             raise RuntimeError(3, f"Select Term Failed")
         else:
             if "未选择" not in r.text:
-                print("Unexpected Error Occured. Are you Student?")
+                printf("Unexpected Error Occured. Are you Student?")
                 logging.critical("Select Term Failed: User role is student?")
                 raise RuntimeError(9, f"User seems not a student")
             else:
-                print("Unknown Error Occured. TermId invalid?")
+                printf("Unknown Error Occured. TermId invalid?")
                 logging.critical("Select Term Failed: Invalid TermID?")
                 raise RuntimeError(8, f"Select Term Failed")
     logging.info("Selected Term: %s" % term)
@@ -452,8 +557,8 @@ def login(username, encryptpwd):
     try:
         r = session.get(_baseurl)
     except Exception as emsg:
-        print(str(emsg))
-        print("\nUnable to connect:(\nPlease use VPN or check network settings")
+        printf(str(emsg))
+        printf("\nUnable to connect:(\nPlease use VPN or check network settings")
         logging.error("ERROR in logging in: %s" % emsg)
         exit(1)
     if not r.url.startswith(
@@ -506,244 +611,260 @@ def login(username, encryptpwd):
             return selectTerm(Termlist[0].termid, session)
 
 
-print("SCourseHelper V" + VER)
-print()
-print("FREE, Open Source on https://github.com/hidacow/SHU-CourseHelper")
-print()
-print()
-print("Reading Config...", end="")
-readconfig()
-print()
-if keep_logs == True:
-    logging.basicConfig(filename=LOGPATH, format=LOG_FORMAT, datefmt=DATE_FORMAT, level=logging_level)
-    print("Logging is ENABLED. Program logs can be found at %s\n" % LOGPATH)
-else:
-    logging.disable(100)
+count = 0
+while count < 6:
 
-logging.info("SCourseHelper V%s started." % VER)
-if username == "":
-    username = input("User:")
-else:
-    print("User:%s" % username)
-if password == "" and encryptedpassword == "":
-    password = getpass.getpass("Password:")
-
-if encryptedpassword != "":
-    s = login(username, encryptedpassword)
-else:
-    s = login(username, encryptPass(password))
-
-if not isSelectTime(s):
-    i = 0
-    print("Not Selection Time...Wait %.2f sec..." % chk_select_time_delay)
-    logging.warning("Not Selection Time")
-    while True:
-        print("Retry Times: " + str(i), end='\r')
-        time.sleep(chk_select_time_delay)
-        i += 1
-        if isSelectTime(s):
-            break
-
-print("Selection Time OK", end="\n\n")
-if len(inputlist) == 0:
-    i = 1
-    print("Enter the courses in the config is recommended. See README for more info\n")
-
-    print("Please enter the info of courses, enter nothing to finish")
-    while True:
-        a = input("Enter the course  id of course %d :" % i)
-        if a == "":
-            if i > 1:
-                break
-            else:
-                print("You must enter at least 1 course")
-                continue
-        if len(a) != 8:
-            print("Invalid input, please enter again")
-            continue
-        b = input("Enter the teacher id of course %d :" % i)
-
-        if b == "":
-            if i > 1:
-                break
-            else:
-                print("Incomplete information, please enter again")
-                continue
-        if len(b) != 4:
-            print("Invalid input, please enter again")
-            continue
-        c = input("Do you want to replace a course you have selected with this one?\n[Y/N(default)]:")
-        while True:
-            if c == "Y" or c == "y":
-                d = input("Enter the course  id of the course to replace :")
-                if d == "":
-                    print("Abort")
-                    c = "n"
-                    continue
-                if len(d) != 8:
-                    print("Invalid input, please enter again")
-                    continue
-                e = input("Enter the teacher id of the course to replace :")
-                if e == "":
-                    print("Incomplete information, please enter again")
-                    continue
-                if len(e) != 4:
-                    print("Invalid input, please enter again")
-                    continue
-                inputlist.append(Courseitem(a, b, d, e))
-                break
-            else:
-                if c == "N" or c == "n" or c == "":
-                    inputlist.append(Courseitem(a, b, "null", "null"))
-                    break
-                else:
-                    c = input("Please enter ""Y"" or ""N"" :")
-        i += 1
-
-SubmitList = []
-DropList = []
-i = 0
-while True:
-    if i > 0:
-        if auto_cls:
-            clear()
+    try:
+        print("SCourseHelper V" + VER)
         print()
-        print('#' * 50)
+        print("FREE, Open Source on https://github.com/hidacow/SHU-CourseHelper")
         print()
-        print("Retry:%d" % i)
-        SubmitList.clear()
-        DropList.clear()
-
-    print("Checking %d course(s)" % len(inputlist), end="\n\n")
-    print("-------------------------")
-    for item in inputlist:
-        course = getCourseInfo(item.courseid, item.teacherid, s)
-        print(str_courseinfo(course), end="")
-        if canSelect(course):
-            print("... can be selected!!")
-            SubmitList.append(item)
-            if item.replacecid != "null":
-                DropList.append(item)
-                SubmitList.append(Courseitem(item.replacecid, item.replacetid, "backup",
-                                             "backup"))  # select it back in case of failure
+        print()
+        print("Reading Config...", end="")
+        readconfig()
+        print()
+        if keep_logs == True:
+            logging.basicConfig(filename=LOGPATH, format=LOG_FORMAT, datefmt=DATE_FORMAT, level=logging_level)
+            print("Logging is ENABLED. Program logs can be found at %s\n" % LOGPATH)
         else:
-            print("")
-    print("-------------------------", end="\n\n")
+            logging.disable(100)
 
-    if len(SubmitList) > 0:
-        print("Trying to select %d course(s)..." % (len(SubmitList) - len(DropList)), end="\n\n")
-        logging.info("%d course(s) can be selected" % (len(SubmitList) - len(DropList)))
-        dropsuccess = 0
-        if len(DropList) > 0:  # Drop the replace courses first
-            print("Need to drop %d course(s)..." % len(DropList), end="")
-            logging.info("%d course(s) need to be dropped first" % len(DropList))
-            if returnCourse(DropList, s):
-                print("Success")
-                dropsuccess = 1
-            else:
-                print("Failed, continue anyway")
-                logging.warning("Cannot to return some courses")
-                dropsuccess = -1
+        logging.info("SCourseHelper V%s started." % VER)
+        if username == "":
+            username = input("User:")
+        else:
+            print("User:%s" % username)
+        if password == "" and encryptedpassword == "":
+            password = getpass.getpass("Password:")
 
-        print()
-        result = selectCourse(SubmitList, s)
-        for item in SubmitList:
-            rid = findcourseinlist(item.courseid, item.teacherid, result)  # find in result
-            selection = result[rid]
-            if item.replacecid != "null" and item.replacecid != "backup":  # Has backup
-                rid2 = findcourseinlist(item.replacecid, item.replacetid, result)  # Find the result of backup selection
-                # if selection is success and backupselection is not success: replacement successful, delete from task
-                # if selection failed but backup selection is success: replacement not successful, continue loop
-                # if selection and backup both failed: continue loop
-                print(str_selectionresult(selection))
-                logging.info("Target  Course %s" % str_selectionresult(selection))
-                if selection.isSuccess:
-                    if not result[rid2].isSuccess:  # Best situation
-                        print("Previously selected course %s had been automatically returned" % str_coursebaseinfo(result[rid2]))
-                        logging.info("Previously selected course %s had been automatically returned" % str_coursebaseinfo(result[rid2]))
-                    else:  # Exceptional situation: User entered two courses that are not conflicting, TODO(maybe):return the unwanted course
-                        print(str_selectionresult(result[rid2]))
-                        print(
-                            "The two courses are not conflicting, both are selected, you might want to manually return one of them")
+        if encryptedpassword != "":
+            s = login(username, encryptedpassword)
+        else:
+            s = login(username, encryptPass(password))
+
+        if not isSelectTime(s):
+            i = 0
+            print("Not Selection Time...Wait %.2f sec..." % chk_select_time_delay)
+            logging.warning("Not Selection Time")
+            while True:
+                print("Retry Times: " + str(i))
+                time.sleep(chk_select_time_delay)
+                i += 1
+                if isSelectTime(s):
+                    break
+
+        print("Selection Time OK", end="\n\n")
+        if len(inputlist) == 0:
+            i = 1
+            print("Enter the courses in the config is recommended. See README for more info\n")
+
+            print("Please enter the info of courses, enter nothing to finish")
+            while True:
+                a = input("Enter the course  id of course %d :" % i)
+                if a == "":
+                    if i > 1:
+                        break
+                    else:
+                        print("You must enter at least 1 course")
+                        continue
+                if len(a) != 8:
+                    print("Invalid input, please enter again")
+                    continue
+                b = input("Enter the teacher id of course %d :" % i)
+
+                if b == "":
+                    if i > 1:
+                        break
+                    else:
+                        print("Incomplete information, please enter again")
+                        continue
+                if len(b) != 4:
+                    print("Invalid input, please enter again")
+                    continue
+                c = input("Do you want to replace a course you have selected with this one?\n[Y/N(default)]:")
+                while True:
+                    if c == "Y" or c == "y":
+                        d = input("Enter the course  id of the course to replace :")
+                        if d == "":
+                            print("Abort")
+                            c = "n"
+                            continue
+                        if len(d) != 8:
+                            print("Invalid input, please enter again")
+                            continue
+                        e = input("Enter the teacher id of the course to replace :")
+                        if e == "":
+                            print("Incomplete information, please enter again")
+                            continue
+                        if len(e) != 4:
+                            print("Invalid input, please enter again")
+                            continue
+                        inputlist.append(Courseitem(a, b, d, e))
+                        break
+                    else:
+                        if c == "N" or c == "n" or c == "":
+                            inputlist.append(Courseitem(a, b, "null", "null"))
+                            break
+                        else:
+                            c = input("Please enter ""Y"" or ""N"" :")
+                i += 1
+
+        SubmitList = []
+        DropList = []
+        i = 0
+        send("开始了")
+        while True:
+            if i > 0:
+                if auto_cls:
+                    clear()
+                print()
+                print('#' * 50)
+                print()
+                print("Retry:%d" % i)
+                SubmitList.clear()
+                DropList.clear()
+
+            print("Checking %d course(s)" % len(inputlist), end="\n\n")
+            print("-------------------------")
+            for item in inputlist:
+                course = getCourseInfo(item.courseid, item.teacherid, s)
+                print(str_courseinfo(course), end="")
+                if canSelect(course):
+                    print("... can be selected!!")
+                    SubmitList.append(item)
+                    if item.replacecid != "null":
+                        DropList.append(item)
+                        SubmitList.append(Courseitem(item.replacecid, item.replacetid, "backup",
+                                                     "backup"))  # select it back in case of failure
+                else:
+                    print("")
+            print("-------------------------", end="\n\n")
+
+            if len(SubmitList) > 0:
+                printf("Trying to select %d course(s)..." % (len(SubmitList) - len(DropList)), end="\n\n")
+                logging.info("%d course(s) can be selected" % (len(SubmitList) - len(DropList)))
+                dropsuccess = 0
+                if len(DropList) > 0:  # Drop the replace courses first
+                    printf("Need to drop %d course(s)..." % len(DropList), end="")
+                    logging.info("%d course(s) need to be dropped first" % len(DropList))
+                    if returnCourse(DropList, s):
+                        printf("Success")
+                        dropsuccess = 1
+                    else:
+                        printf("Failed, continue anyway")
+                        logging.warning("Cannot to return some courses")
+                        dropsuccess = -1
+
+            print()
+            result = selectCourse(SubmitList, s)
+            for item in SubmitList:
+                rid = findcourseinlist(item.courseid, item.teacherid, result)  # find in result
+                selection = result[rid]
+                if item.replacecid != "null" and item.replacecid != "backup":  # Has backup
+                    rid2 = findcourseinlist(item.replacecid, item.replacetid, result)  # Find the result of backup selection
+                    # if selection is success and backupselection is not success: replacement successful, delete from task
+                    # if selection failed but backup selection is success: replacement not successful, continue loop
+                    # if selection and backup both failed: continue loop
+                    printf(str_selectionresult(selection))
+                    logging.info("Target  Course %s" % str_selectionresult(selection))
+                    if selection.isSuccess:
+                        if not result[rid2].isSuccess:  # Best situation
+                            printf("Previously selected course %s had been automatically returned" % str_coursebaseinfo(result[rid2]))
+                            logging.info("Previously selected course %s had been automatically returned" % str_coursebaseinfo(result[rid2]))
+                        else:  # Exceptional situation: User entered two courses that are not conflicting, TODO(maybe):return the unwanted course
+                            printf(str_selectionresult(result[rid2]))
+                            printf(
+                                "The two courses are not conflicting, both are selected, you might want to manually return one of them")
+                            logging.info("Backup Course %s" % str_selectionresult(result[rid2]))
+                        deletecoursefromlist(selection.courseid, selection.teacherid)  # remove from task due to success
+                    else:  # not selection.isSuccess
+                        printf(str_selectionresult(result[rid2]))
                         logging.info("Backup Course %s" % str_selectionresult(result[rid2]))
-                    deletecoursefromlist(selection.courseid, selection.teacherid)  # remove from task due to success
-                else:  # not selection.isSuccess
-                    print(str_selectionresult(result[rid2]))
-                    logging.info("Backup Course %s" % str_selectionresult(result[rid2]))
-                    if result[rid2].isSuccess:
-                        print("Course replacement failed, the course you previously selected had been selected back")
-                        # if target course selection failed with certain reason, discontinue
+                        if result[rid2].isSuccess:
+                            printf("Course replacement failed, the course you previously selected had been selected back")
+                            # if target course selection failed with certain reason, discontinue
+                            if selection.isSuccess or any(x in selection.msg for x in _stop_condition2):
+                                deletecoursefromlist(selection.courseid, selection.teacherid)
+                                if "已选此课程" in selection.msg:
+                                    printnwarn("Please return the course %s manually, and add it again" % selection.coursename)
+                                if any(x in selection.msg for x in _stop_condition):
+                                    printnwarn(
+                                        "Please change courses conflicting with %s manually, and add it again" % selection.coursename)
+                                printnwarn(
+                                    "Due to unresolved conflicts in selecting the target course, the program will stop selecting this course")
+                            else:
+                                printf("The program will continue trying to replace the course")
+                        else:  # Exceptional or Unfortunate situation: Both courses are dropped
+                            if "无此教学班数据" in result[rid2].msg:
+                                printnwarn("Invalid Return Course Data")
+                                deletecoursefromlist(selection.courseid, selection.teacherid)
+                                # remove original item first
+                                inputlist.append(Courseitem(item.courseid, item.teacherid, "null", "null"))
+                                logging.info("Add %s,%s to list" % (item.courseid, item.teacherid))
+                                # add an item without replacement
+                            else:
+                                if any(x in selection.msg for x in _stop_condition2):
+                                    if dropsuccess == 1:  # drop success
+                                        printnwarn(
+                                            "Seems impossible to replace course, please check selection strategy and retry")
+                                        deletecoursefromlist(selection.courseid, selection.teacherid)  # discontinue
+                                    if dropsuccess == -1 and ("已选此课程" in result[rid2].msg) or any(x in result[rid2].msg for x in _stop_condition):
+                                        printnwarn("Seems unable to select the original course back, did you select it?")
+                                        deletecoursefromlist(selection.courseid, selection.teacherid)  # discontinue
+                                    else:
+                                        if dropsuccess == -1:
+                                            printf(
+                                                "It seems that the error relates to failure in returning courses, the program will retry")
+                                else:
+                                    printf(
+                                        "Unfortunately, failed to select both courses, trying to select either of the courses")
+                                    deletecoursefromlist(selection.courseid, selection.teacherid)
+                                    logging.warning("Cannot Select both course. Add %s,%s ; %s,%s to list" % (
+                                        item.courseid, item.teacherid, item.replacecid, item.replacetid))
+                                    # remove original item first
+                                    inputlist.append(Courseitem(item.courseid, item.teacherid, "null", "null"))
+                                    # add an item without replacement
+                                    inputlist.append(Courseitem(item.replacecid, item.replacetid, "null", "null"))
+                                    # add the original course to tasks
+                else:
+                    if item.replacecid != "backup":
+                        printf(str_selectionresult(selection))
+                        logging.info("Target  Course %s" % str_selectionresult(selection))
                         if selection.isSuccess or any(x in selection.msg for x in _stop_condition2):
                             deletecoursefromlist(selection.courseid, selection.teacherid)
+                            # success or need user actions, discontinue
                             if "已选此课程" in selection.msg:
                                 printnwarn("Please return the course %s manually, and add it again" % selection.coursename)
                             if any(x in selection.msg for x in _stop_condition):
                                 printnwarn(
                                     "Please change courses conflicting with %s manually, and add it again" % selection.coursename)
-                            printnwarn(
-                                "Due to unresolved conflicts in selecting the target course, the program will stop selecting this course")
-                        else:
-                            print("The program will continue trying to replace the course")
-                    else:  # Exceptional or Unfortunate situation: Both courses are dropped
-                        if "无此教学班数据" in result[rid2].msg:
-                            printnwarn("Invalid Return Course Data")
-                            deletecoursefromlist(selection.courseid, selection.teacherid)
-                            # remove original item first
-                            inputlist.append(Courseitem(item.courseid, item.teacherid, "null", "null"))
-                            logging.info("Add %s,%s to list" % (item.courseid, item.teacherid))
-                            # add an item without replacement
-                        else:
-                            if any(x in selection.msg for x in _stop_condition2):
-                                if dropsuccess == 1:  # drop success
-                                    printnwarn(
-                                        "Seems impossible to replace course, please check selection strategy and retry")
-                                    deletecoursefromlist(selection.courseid, selection.teacherid)  # discontinue
-                                if dropsuccess == -1 and ("已选此课程" in result[rid2].msg) or any(x in result[rid2].msg for x in _stop_condition):
-                                    printnwarn("Seems unable to select the original course back, did you select it?")
-                                    deletecoursefromlist(selection.courseid, selection.teacherid)  # discontinue
-                                else:
-                                    if dropsuccess == -1:
-                                        print(
-                                            "It seems that the error relates to failure in returning courses, the program will retry")
-                            else:
-                                print(
-                                    "Unfortunately, failed to select both courses, trying to select either of the courses")
-                                deletecoursefromlist(selection.courseid, selection.teacherid)
-                                logging.warning("Cannot Select both course. Add %s,%s ; %s,%s to list" % (
-                                    item.courseid, item.teacherid, item.replacecid, item.replacetid))
-                                # remove original item first
-                                inputlist.append(Courseitem(item.courseid, item.teacherid, "null", "null"))
-                                # add an item without replacement
-                                inputlist.append(Courseitem(item.replacecid, item.replacetid, "null", "null"))
-                                # add the original course to tasks
+                            printf(
+                                "You may also edit the config to let the program automatically return conflicting courses")
+                    # else is backup, ok to skip
+                del result[rid]  # We don't need this result item anymore
+                print()
+
+                # Judge task progress
+                if len(inputlist) == 0:
+                    printf("Task done!")
+                    logging.info("All Task Done!")
+                    break
             else:
-                if item.replacecid != "backup":
-                    print(str_selectionresult(selection))
-                    logging.info("Target  Course %s" % str_selectionresult(selection))
-                    if selection.isSuccess or any(x in selection.msg for x in _stop_condition2):
-                        deletecoursefromlist(selection.courseid, selection.teacherid)
-                        # success or need user actions, discontinue
-                        if "已选此课程" in selection.msg:
-                            printnwarn("Please return the course %s manually, and add it again" % selection.coursename)
-                        if any(x in selection.msg for x in _stop_condition):
-                            printnwarn(
-                                "Please change courses conflicting with %s manually, and add it again" % selection.coursename)
-                        print(
-                            "You may also edit the config to let the program automatically return conflicting courses")
-                # else is backup, ok to skip
-            del result[rid]  # We don't need this result item anymore
-            print()
+                print("No course can be selected...")
 
-        # Judge task progress
-        if len(inputlist) == 0:
-            print("Task done!")
-            logging.info("All Task Done!")
-            break
-    else:
-        print("No course can be selected...")
-
-    print("%d course(s) remaining...Wait %.2f sec..." % (len(inputlist), query_delay))
-    logging.debug("%d course(s) remaining" % len(inputlist))
-    i += 1
-    time.sleep(query_delay)
-logging.info("Program terminated normally.")
+            print("%d course(s) remaining...Wait %.2f sec..." % (len(inputlist), query_delay))
+            logging.debug("%d course(s) remaining" % len(inputlist))
+            i += 1
+            time.sleep(query_delay)
+        logging.info("Program terminated normally.")
+    except Exception as e:
+        ans = ""
+        for each in e.args:
+            if type(each) is str:
+                ans += each + '\n'
+        printf("报错了，但仍然在继续运行:" + ans)
+        time.sleep(60)
+        count += 1
+        if (count > 5):
+            printf("报错五次了，不运行了")
+            e = 2
