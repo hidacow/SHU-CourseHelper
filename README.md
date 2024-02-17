@@ -191,7 +191,7 @@ Once you entered/configured all the relevant information, the program will autom
 
 ## **Contribute**
 
-You can star this project, create issues, discussion threads or [buy me a cup of coffee](https://ishs.gq/jz.html)
+You can star this project, create issues, discussion threads or fork it~
 
 ## License
 

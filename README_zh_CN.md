@@ -190,7 +190,7 @@ python SCourseHelper.py
 
 ## **支持**
 
-欢迎点 Star，提 issue，讨论或[扫码捐助](https://ishs.gq/jz.html)
+欢迎点 Star，提 issue，讨论或fork本项目~
 
 ## License
 
