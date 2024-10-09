@@ -4,6 +4,11 @@
 
 [中文版](README_zh_CN.md)
 
+> [!IMPORTANT]  
+> This repository is deprecated due to the introduction of the new system and the author's graduation from SHU. 
+>
+> Thank you all for using and supporting this project:)
+
 ## **Introduction**
 
 This program can refresh pages of SHU Course Selection System automatically and select courses once it is selection time or the courses are available.
